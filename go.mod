@@ -1,4 +1,4 @@
-module gitlab.udevs.io/billz/billz_packages
+module github.com/billz-2/packages
 
 go 1.23.0
 
