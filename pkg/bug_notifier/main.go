@@ -1,4 +1,4 @@
-package packages
+package bug_notifier
 
 import (
 	"context"
