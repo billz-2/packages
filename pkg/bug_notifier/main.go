@@ -1,17 +1,17 @@
-package error_reporter
+package bug_notifier
 
 import (
 	"context"
 )
 
-type ErrorReporter interface {
+type BugNotifier interface {
 	Notify(err error, rawData ...interface{}) error
 }
 
-var errorReporter ErrorReporter
+var bugNotifier BugNotifier
 
 func init() {
-	errorReporter = Configure(Config{})
+	bugNotifier = Configure(Config{})
 }
 
 type Config struct {
@@ -21,12 +21,12 @@ type Config struct {
 	MainContext  context.Context
 }
 
-func Configure(cfg Config) ErrorReporter {
-	errorReporter = NewBugsnag(cfg)
+func Configure(cfg Config) BugNotifier {
+	bugNotifier = NewBugsnag(cfg)
 
-	return errorReporter
+	return bugNotifier
 }
 
 func Notify(err error, rawData ...interface{}) error {
-	return errorReporter.Notify(err, rawData...)
+	return bugNotifier.Notify(err, rawData...)
 }
