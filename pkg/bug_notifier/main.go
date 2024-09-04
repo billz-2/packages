@@ -2,7 +2,6 @@ package bug_notifier
 
 import (
 	"context"
-	"fmt"
 )
 
 type BugNotifier interface {
@@ -29,6 +28,5 @@ func Configure(cfg Config) BugNotifier {
 }
 
 func Notify(err error, rawData ...interface{}) error {
-	fmt.Printf("Bugsnag Notify data: %+v\n", rawData)
 	return bugNotifier.Notify(err, rawData...)
 }
