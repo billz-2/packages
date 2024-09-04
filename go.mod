@@ -1,6 +1,6 @@
 module github.com/billz-2/packages
 
-go 1.23.0
+go 1.20.0
 
 require github.com/bugsnag/bugsnag-go/v2 v2.5.0
 
