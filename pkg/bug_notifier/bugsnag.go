@@ -9,6 +9,7 @@ func NewBugsnag(cfg Config) *bugsnag.Notifier {
 		APIKey:       cfg.APIKey,
 		ReleaseStage: cfg.ReleaseStage,
 		MainContext:  cfg.MainContext,
+		AppType:      cfg.AppType,
 	})
 
 	return notifier
