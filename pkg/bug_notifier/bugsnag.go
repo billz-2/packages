@@ -5,7 +5,15 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-func NewBugsnag(cfg Config) *bugsnag.Notifier {
+type Bugsnag interface {
+	Notify(err error, rawData ...interface{}) error
+}
+
+type bugsnagClient struct {
+	notifier *bugsnag.Notifier
+}
+
+func NewBugsnag(cfg Config) Bugsnag {
 	notifier := bugsnag.New(bugsnag.Configuration{
 		APIKey:       cfg.APIKey,
 		ReleaseStage: cfg.ReleaseStage,
@@ -23,5 +31,9 @@ func NewBugsnag(cfg Config) *bugsnag.Notifier {
 		return nil
 	})
 
-	return notifier
+	return &bugsnagClient{notifier: notifier}
+}
+
+func (b *bugsnagClient) Notify(err error, rawData ...interface{}) error {
+	return b.notifier.Notify(err, rawData)
 }

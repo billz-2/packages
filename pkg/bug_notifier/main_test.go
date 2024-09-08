@@ -2,10 +2,11 @@ package bug_notifier
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/pkg/errors"
 
 	"go.uber.org/zap"
 )
@@ -26,4 +27,5 @@ func TestNotify(t *testing.T) {
 
 	fmt.Println(time.Since(n).Milliseconds())
 
+	time.Sleep(time.Second * 2)
 }
