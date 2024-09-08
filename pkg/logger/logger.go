@@ -65,7 +65,7 @@ func New(level LogLevel, namespace string) Logger {
 
 	zap.RedirectStdLog(logger.zap)
 
-	if Log != nil {
+	if Log == nil {
 		Log = &logger
 	}
 
