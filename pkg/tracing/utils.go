@@ -50,60 +50,11 @@ func StartKafkaConsumerTracerSpan(ctx context.Context, headers []sarama.RecordHe
 		propagation.Baggage{},
 	)
 
-	carrierFromKafkaHeaders := TextMapCarrierFromKafkaMessageHeaders(headers)
+	carrierFromKafkaHeaders := textMapCarrierFromKafkaMessageHeaders(headers)
 
 	ctx = propagator.Extract(ctx, carrierFromKafkaHeaders)
 
 	return GetGlobalTracer().Start(ctx, operationName)
-}
-
-func TextMapCarrierFromKafkaMessageHeaders(headers []sarama.RecordHeader) propagation.TextMapCarrier {
-	textMap := CustomCarrier{}
-
-	for _, header := range headers {
-		textMap.Set(string(header.Key), string(header.Value))
-
-	}
-	return textMap
-}
-
-func InjectTextMapCarrier(ctx context.Context, spanCtx trace.SpanContext) propagation.TextMapCarrier {
-	var propagator = propagation.NewCompositeTextMapPropagator(
-		propagation.TraceContext{},
-		propagation.Baggage{},
-	)
-	m := CustomCarrier{}
-
-	propagator.Inject(ctx, propagation.TextMapCarrier(m))
-
-	return m
-}
-
-func GetKafkaTracingHeadersFromSpanCtx(ctx context.Context, spanCtx trace.SpanContext) []sarama.RecordHeader {
-	textMapCarrier := InjectTextMapCarrier(ctx, spanCtx)
-
-	kafkaMessageHeaders := TextMapCarrierToKafkaMessageHeaders(textMapCarrier)
-
-	return kafkaMessageHeaders
-}
-
-func TextMapCarrierToKafkaMessageHeaders(textMap propagation.TextMapCarrier) []sarama.RecordHeader {
-	headers := make([]sarama.RecordHeader, 0, len(textMap.Keys()))
-
-	for _, key := range textMap.Keys() {
-		headers = append(headers, sarama.RecordHeader{
-			Key:   []byte(key),
-			Value: []byte(textMap.Get(key)),
-		})
-	}
-
-	return headers
-}
-
-func InjectHeadersIntoCloudevents(event *cloudevents.Event, headers []sarama.RecordHeader) {
-	for _, header := range headers {
-		event.SetExtension(string(header.Key), string(header.Value))
-	}
 }
 
 func GetEventHeaders(event cloudevents.Event) []sarama.RecordHeader {
@@ -123,17 +74,17 @@ func GetEventHeaders(event cloudevents.Event) []sarama.RecordHeader {
 func InjectDataToSpanAndEvent(ctx context.Context, event *cloudevents.Event, span trace.Span) {
 	addEventLogsToSpan(event, span)
 
-	headers := GetKafkaTracingHeadersFromSpanCtx(ctx, span.SpanContext())
+	headers := getKafkaTracingHeadersFromSpanCtx(ctx, span.SpanContext())
 	for _, header := range headers {
 		event.SetExtension(string(header.Key), string(header.Value))
 
 	}
 }
 
-func addEventLogsToSpan(event *cloudevents.Event, span trace.Span) {
-	span.SetAttributes(
-		attribute.String("event", fmt.Sprintf("%v", event)),
-	)
+func InjectHeadersIntoCloudevents(event *cloudevents.Event, headers []sarama.RecordHeader) {
+	for _, header := range headers {
+		event.SetExtension(string(header.Key), string(header.Value))
+	}
 }
 
 func GetSpanIDFromContext(ctx context.Context) string {
@@ -158,4 +109,53 @@ func GetSpan(ctx context.Context, operationName string, req ...interface{}) (con
 	}
 
 	return ctx, childSpan
+}
+
+func textMapCarrierFromKafkaMessageHeaders(headers []sarama.RecordHeader) propagation.TextMapCarrier {
+	textMap := CustomCarrier{}
+
+	for _, header := range headers {
+		textMap.Set(string(header.Key), string(header.Value))
+
+	}
+	return textMap
+}
+
+func injectTextMapCarrier(ctx context.Context, spanCtx trace.SpanContext) propagation.TextMapCarrier {
+	var propagator = propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	)
+	m := CustomCarrier{}
+
+	propagator.Inject(ctx, propagation.TextMapCarrier(m))
+
+	return m
+}
+
+func getKafkaTracingHeadersFromSpanCtx(ctx context.Context, spanCtx trace.SpanContext) []sarama.RecordHeader {
+	textMapCarrier := injectTextMapCarrier(ctx, spanCtx)
+
+	kafkaMessageHeaders := textMapCarrierToKafkaMessageHeaders(textMapCarrier)
+
+	return kafkaMessageHeaders
+}
+
+func textMapCarrierToKafkaMessageHeaders(textMap propagation.TextMapCarrier) []sarama.RecordHeader {
+	headers := make([]sarama.RecordHeader, 0, len(textMap.Keys()))
+
+	for _, key := range textMap.Keys() {
+		headers = append(headers, sarama.RecordHeader{
+			Key:   []byte(key),
+			Value: []byte(textMap.Get(key)),
+		})
+	}
+
+	return headers
+}
+
+func addEventLogsToSpan(event *cloudevents.Event, span trace.Span) {
+	span.SetAttributes(
+		attribute.String("event", fmt.Sprintf("%v", event)),
+	)
 }
