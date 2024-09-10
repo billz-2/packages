@@ -87,6 +87,14 @@ func InjectHeadersIntoCloudevents(event *cloudevents.Event, headers []sarama.Rec
 	}
 }
 
+func GetKafkaTracingHeadersFromSpanCtx(ctx context.Context, spanCtx trace.SpanContext) []sarama.RecordHeader {
+	textMapCarrier := injectTextMapCarrier(ctx, spanCtx)
+
+	kafkaMessageHeaders := textMapCarrierToKafkaMessageHeaders(textMapCarrier)
+
+	return kafkaMessageHeaders
+}
+
 func GetSpanIDFromContext(ctx context.Context) string {
 	span := trace.SpanFromContext(ctx)
 	span.SpanContext()
