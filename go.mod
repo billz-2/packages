@@ -2,8 +2,6 @@ module github.com/billz-2/packages
 
 go 1.21
 
-toolchain go1.23.0
-
 require (
 	github.com/IBM/sarama v1.43.3
 	github.com/bugsnag/bugsnag-go/v2 v2.5.0
