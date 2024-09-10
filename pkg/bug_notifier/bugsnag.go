@@ -19,6 +19,7 @@ func NewBugsnag(cfg Config) Bugsnag {
 		ReleaseStage: cfg.ReleaseStage,
 		MainContext:  cfg.MainContext,
 		AppType:      cfg.AppType,
+		Synchronous:  true,
 	})
 
 	bugsnag.OnBeforeNotify(func(e *bugsnag.Event, c *bugsnag.Configuration) error {
