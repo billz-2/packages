@@ -1,1 +1,8 @@
 # billz_platform
+
+package for common functions for all microservices
+
+- how to add new package version:
+  - push changes into master
+  - git tag -a v0.0.13 -m "skip stack level"
+  - git push origin v0.0.13
