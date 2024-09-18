@@ -134,7 +134,7 @@ func (l *loggerImpl) log(ctx context.Context, level LogLevel, message string, fi
 		l.zap.Fatal(message, fields...)
 	}
 
-	if level == LevelError || level == LevelWarn {
+	if level == LevelError {
 		fields = append(fields, zap.Any("message", message))
 		for _, field := range fields {
 			if err, ok := field.Interface.(error); ok {
