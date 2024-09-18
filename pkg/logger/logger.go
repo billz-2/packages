@@ -138,7 +138,7 @@ func (l *loggerImpl) log(ctx context.Context, level LogLevel, message string, fi
 		fields = append(fields, zap.Any("message", message))
 		for _, field := range fields {
 			if err, ok := field.Interface.(error); ok {
-				bug_notifier.Notify(errors.New(err, 4), fields)
+				bug_notifier.Notify(errors.New(err, 3), fields)
 			}
 		}
 	}
