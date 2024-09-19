@@ -23,8 +23,19 @@ func NewBugsnag(cfg Config) Bugsnag {
 
 	bugsnag.OnBeforeNotify(func(e *bugsnag.Event, c *bugsnag.Configuration) error {
 		for _, data := range e.RawData {
-			if fields, ok := data.([]zapcore.Field); ok {
-				e.MetaData.Add("data", "data", fields)
+			if interfaceSlice, ok := data.([]interface{}); ok {
+				if len(interfaceSlice) == 1 {
+					if fields, ok := interfaceSlice[0].([]zapcore.Field); ok {
+						data := make(map[string]interface{})
+						for _, field := range fields {
+							data[field.Key] = field.String
+							if err, ok := field.Interface.(error); ok {
+								data[field.Key] = err.Error()
+							}
+						}
+						e.MetaData.Add("data", "data", data)
+					}
+				}
 			}
 		}
 
