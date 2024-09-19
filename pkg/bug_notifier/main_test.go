@@ -14,7 +14,7 @@ import (
 func TestNotify(t *testing.T) {
 	n := time.Now()
 	Configure(Config{
-		APIKey:       "dce81c01be2ed2143d2eef86981903c5",
+		APIKey:       "set_from_env",
 		ReleaseStage: "test",
 		AppType:      "test",
 		MainContext:  context.TODO(),
