@@ -4,7 +4,7 @@ go 1.21
 
 require (
 	github.com/IBM/sarama v1.43.3
-	github.com/bugsnag/bugsnag-go/v2 v2.5.0
+	github.com/bugsnag/bugsnag-go/v2 v2.5.1
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/gin-gonic/gin v1.10.0
 	github.com/golang/mock v1.6.0
