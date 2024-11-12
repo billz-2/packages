@@ -15,17 +15,24 @@ import (
 type Field = zapcore.Field
 
 var (
-	// Int ..
-	Int = zap.Int
-	// String ...
-	String = zap.String
-	// Error ...
-	Error = zap.Error
-	// Bool ...
-	Bool = zap.Bool
-
-	// Any ...
-	Any = zap.Any
+	Int      = zap.Int
+	Int8     = zap.Int8
+	Int16    = zap.Int16
+	Int32    = zap.Int32
+	Int64    = zap.Int64
+	Uint     = zap.Uint
+	Uint8    = zap.Uint8
+	Uint16   = zap.Uint16
+	Uint32   = zap.Uint32
+	Uint64   = zap.Uint64
+	Duration = zap.Duration
+	Time     = zap.Time
+	String   = zap.String
+	Error    = zap.Error
+	Bool     = zap.Bool
+	Float64  = zap.Float64
+	Float32  = zap.Float32
+	Any      = zap.Any
 )
 
 // Logger ...
