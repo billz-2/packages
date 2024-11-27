@@ -110,7 +110,7 @@ services:
     command: server /data
 
   cache:
-    image: docker.io/bitnami/redis:7.2
+    image: docker.io/bitnami/redis:7.4
     environment:
       - ALLOW_EMPTY_PASSWORD=yes
       - REDIS_PASSWORD=""
