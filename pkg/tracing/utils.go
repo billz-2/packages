@@ -112,8 +112,8 @@ func GetTraceIDFromContext(ctx context.Context) string {
 func GetSpan(ctx context.Context, operationName string, req ...interface{}) (context.Context, trace.Span) {
 	ctx, childSpan := GetGlobalTracer().Start(ctx, operationName)
 
-	if len(req) > 0 {
-		childSpan.SetAttributes(attribute.String("request", fmt.Sprintf("%+v", req[0])))
+	for i, v := range req {
+		childSpan.SetAttributes(attribute.String(fmt.Sprintf("request_%d", i), fmt.Sprintf("%+v", v)))
 	}
 
 	return ctx, childSpan
