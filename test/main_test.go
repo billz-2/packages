@@ -2,6 +2,8 @@ package test
 
 import (
 	"context"
+	"fmt"
+	"github.com/billz-2/packages/pkg/event"
 	"os"
 	"testing"
 	"time"
@@ -12,6 +14,7 @@ import (
 )
 
 var ctx context.Context
+var kafka event.KafkaI
 
 func TestMain(m *testing.M) {
 	ctx = context.Background()
@@ -34,6 +37,17 @@ func TestMain(m *testing.M) {
 	}
 	defer func() { _ = tp.Shutdown(ctx) }()
 
+	kafka, err = event.NewKafka(ctx, event.KafkaConfig{
+		KafkaUrl:        "localhost:9092",
+		KafkaUserName:   "",
+		KafkaPassword:   "",
+		ConsumerGroupID: "test",
+	}, logger.Log)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println(kafka)
 	exitCode := m.Run()
 
 	// wait for all spans to be exported
