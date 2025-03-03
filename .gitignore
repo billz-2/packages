@@ -2,3 +2,5 @@
 vendor
 .env
 .vscode
+storage
+.DS_Store
