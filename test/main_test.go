@@ -2,6 +2,8 @@ package test
 
 import (
 	"context"
+	"github.com/billz-2/packages/pkg/event/mock_kafka"
+	usereventlog "github.com/billz-2/packages/pkg/user_event_log"
 	"os"
 	"testing"
 	"time"
@@ -11,7 +13,10 @@ import (
 	"github.com/billz-2/packages/pkg/tracing"
 )
 
-var ctx context.Context
+var (
+	ctx   context.Context
+	kafka mock_kafka.MockKafkaI
+)
 
 func TestMain(m *testing.M) {
 	ctx = context.Background()
@@ -33,6 +38,10 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	defer func() { _ = tp.Shutdown(ctx) }()
+
+	kafka = mock_kafka.NewMockKafka()
+
+	usereventlog.NewUserEventLogHandler(kafka)
 
 	exitCode := m.Run()
 
