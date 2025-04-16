@@ -14,15 +14,6 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-type Config struct {
-	Environment      string
-	PostgresHost     string
-	PostgresPort     int
-	PostgresUser     string
-	PostgresPassword string
-	PostgresDatabase string
-}
-
 func SetupPostgres(ctx context.Context, cfg Config) (postgresConn *sqlx.DB, databaseUrl string, postgresContainer testcontainers.Container, err error) {
 	internalPort := 5432
 	exposedPort, err := GetFreePort()
