@@ -13,3 +13,5 @@ package for common functions for all microservices
 - how to execute tests
   - docker compose -f docker-compose.test.yml up -d
   - go test ./...
+
+# Hello test our CI cd flow
