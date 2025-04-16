@@ -14,15 +14,6 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-type Config struct {
-	Environment      string
-	PostgresHost     string
-	PostgresPort     int
-	PostgresUser     string
-	PostgresPassword string
-	PostgresDatabase string
-}
-
 func SetupPostgres(ctx context.Context, cfg Config) (postgresConn *sqlx.DB, databaseUrl string, postgresContainer testcontainers.Container, err error) {
 	internalPort := 5432
 	exposedPort, err := GetFreePort()
@@ -77,7 +68,7 @@ func SetupPostgres(ctx context.Context, cfg Config) (postgresConn *sqlx.DB, data
 				return nil, "", nil, fmt.Errorf("failed to get endpoint after %d retries: %w", maxRetries, err)
 			}
 
-			time.Sleep(time.Second)
+			time.Sleep(time.Second * 5)
 		}
 
 		host := getHost(endpoint)
