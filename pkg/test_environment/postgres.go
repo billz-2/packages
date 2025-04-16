@@ -68,7 +68,7 @@ func SetupPostgres(ctx context.Context, cfg Config) (postgresConn *sqlx.DB, data
 				return nil, "", nil, fmt.Errorf("failed to get endpoint after %d retries: %w", maxRetries, err)
 			}
 
-			time.Sleep(time.Second)
+			time.Sleep(time.Second * 5)
 		}
 
 		host := getHost(endpoint)
