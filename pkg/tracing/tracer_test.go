@@ -43,6 +43,11 @@ func Test_newExporter_URLParsing(t *testing.T) {
 			jaegerURL: "https://jaeger-collector.observability.svc.cluster.local:14268/api/traces",
 			expected:  "jaeger-collector.observability.svc.cluster.local:14268",
 		},
+		{
+			name:      "current config format",
+			jaegerURL: "jaeger-collector.observability.svc.cluster.local:14268",
+			expected:  "jaeger-collector.observability.svc.cluster.local:14268",
+		},
 	}
 
 	for _, tc := range testCases {
