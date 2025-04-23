@@ -3,6 +3,7 @@ package tracing
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/IBM/sarama"
 	cloudevents "github.com/cloudevents/sdk-go/v2"
@@ -166,4 +167,9 @@ func addEventLogsToSpan(event *cloudevents.Event, span trace.Span) {
 	span.SetAttributes(
 		attribute.String("event", fmt.Sprintf("%v", event)),
 	)
+}
+
+// indexOf returns the index of substring in s, or -1 if not found
+func indexOf(s, substring string) int {
+	return strings.Index(s, substring)
 }

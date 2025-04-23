@@ -51,9 +51,24 @@ func NewTraceProvider(ctx context.Context, jaegerConfig *Config) (*sdktrace.Trac
 }
 
 func newExporter(ctx context.Context, jaegerConfig *Config) (sdktrace.SpanExporter, error) {
+	// Parse JaegerUrl to extract only host:port
+	// In OpenTelemetry v1.35.0, WithEndpoint expects only host:port without scheme and path
+	url := jaegerConfig.JaegerUrl
+	
+	// Remove scheme (http:// or https://) if present
+	if idx := indexOf(url, "://"); idx >= 0 {
+		url = url[idx+3:]
+	}
+	
+	// Remove path if present - for gRPC we only need host:port
+	if idx := indexOf(url, "/"); idx >= 0 {
+		url = url[:idx]
+	}
+	
+	// Create exporter with properly formatted endpoint
 	return otlptracegrpc.New(
 		ctx,
-		otlptracegrpc.WithEndpoint(jaegerConfig.JaegerUrl),
+		otlptracegrpc.WithEndpoint(url),
 		otlptracegrpc.WithInsecure(),
 	)
 }

@@ -11,5 +11,5 @@ package for common functions for all microservices
   - to update package in microservice execute `go get -u github.com/billz-2/packages`
 
 - how to execute tests
-  - docker compose -f docker-compose.test.yml up -d
+  - docker compose -f ./docker-compose-test.yml up -d
   - go test ./...
