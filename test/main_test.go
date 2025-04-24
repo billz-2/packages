@@ -2,11 +2,12 @@ package test
 
 import (
 	"context"
-	"github.com/billz-2/packages/pkg/event/mock_kafka"
-	usereventlog "github.com/billz-2/packages/pkg/user_event_log"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/billz-2/packages/pkg/event/mock_kafka"
+	usereventlog "github.com/billz-2/packages/pkg/user_event_log"
 
 	"github.com/billz-2/packages/pkg/bug_notifier"
 	"github.com/billz-2/packages/pkg/logger"
@@ -30,7 +31,7 @@ func TestMain(m *testing.M) {
 	})
 
 	jaegerUrl := "localhost:4317"
-	tp, err := tracing.NewTraceProvider(ctx, &tracing.Config{
+	tp, err := tracing.NewTraceProvider(&tracing.Config{
 		ServiceName: "billz_packages",
 		JaegerUrl:   jaegerUrl,
 	})
