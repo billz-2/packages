@@ -53,7 +53,7 @@ func NewTraceProvider(ctx context.Context, jaegerConfig *Config) (*sdktrace.Trac
 func newExporter(ctx context.Context, jaegerConfig *Config) (sdktrace.SpanExporter, error) {
 	return otlptracegrpc.New(
 		ctx,
-		otlptracegrpc.WithEndpoint(jaegerConfig.JaegerUrl),
+		otlptracegrpc.WithEndpointURL(jaegerConfig.JaegerUrl),
 		otlptracegrpc.WithInsecure(),
 	)
 }
