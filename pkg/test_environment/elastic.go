@@ -30,7 +30,8 @@ func SetupElastic(ctx context.Context, cfg Config) (esConfig elasticsearch.Confi
 	}
 
 	internalPort := 9200
-	ws := wait.NewHostPortStrategy(nat.Port(fmt.Sprintf("%d/tcp", internalPort))).
+	ws := wait.ForHTTP("/").
+		WithPort(nat.Port(fmt.Sprintf("%d/tcp", internalPort))).
 		WithPollInterval(100 * time.Millisecond).
 		WithStartupTimeout(5 * time.Minute)
 
