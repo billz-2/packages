@@ -93,7 +93,7 @@ func SetupPostgres(ctx context.Context, cfg Config) (postgresConn *sqlx.DB, data
 	}
 
 	// Add retry logic for database connection
-	maxRetries := 3
+	maxRetries := 8
 	for i := 0; i < maxRetries; i++ {
 		postgresConn, err = sqlx.Open("postgres", conStr)
 		if err == nil {
@@ -111,7 +111,7 @@ func SetupPostgres(ctx context.Context, cfg Config) (postgresConn *sqlx.DB, data
 			return nil, "", nil, fmt.Errorf("failed to connect to database after %d retries: %w", maxRetries, err)
 		}
 
-		time.Sleep(time.Second * 2)
+		time.Sleep(time.Second * 5)
 	}
 
 	return postgresConn, databaseUrl, postgresContainer, nil
