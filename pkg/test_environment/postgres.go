@@ -57,7 +57,7 @@ func SetupPostgres(ctx context.Context, cfg Config) (postgresConn *sqlx.DB, data
 
 		// Add retry logic for container endpoint
 		var endpoint string
-		maxRetries := 5
+		maxRetries := 8
 		for i := 0; i < maxRetries; i++ {
 			endpoint, err = postgresContainer.Endpoint(ctx, "")
 			if err == nil {
@@ -68,7 +68,7 @@ func SetupPostgres(ctx context.Context, cfg Config) (postgresConn *sqlx.DB, data
 				return nil, "", nil, fmt.Errorf("failed to get endpoint after %d retries: %w", maxRetries, err)
 			}
 
-			time.Sleep(time.Second * 5)
+			time.Sleep(time.Second * 10)
 		}
 
 		host := getHost(endpoint)
