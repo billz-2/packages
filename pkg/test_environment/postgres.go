@@ -39,6 +39,7 @@ func SetupPostgres(ctx context.Context, cfg Config) (postgresConn *sqlx.DB, data
 				"POSTGRES_DB":       database,
 				"POSTGRES_USER":     user,
 				"POSTGRES_PASSWORD": password,
+				"TZ":                "UTC",
 			},
 			ExposedPorts: []string{fmt.Sprintf("%d:%d/tcp", exposedPort, internalPort)},
 			WaitingFor:   ws,
