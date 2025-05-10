@@ -24,10 +24,10 @@ func SetupPostgres(ctx context.Context, cfg Config) (postgresConn *sqlx.DB, data
 	var conStr string
 	if cfg.Environment != "local" {
 		// Increase timeout and polling interval for more stability
-		ws := wait.NewHostPortStrategy(nat.Port(fmt.Sprintf("%d/tcp", internalPort))).
-			WithPollInterval(500 * time.Millisecond).
-			WithStartupTimeout(10 * time.Minute)
-
+		ws := wait.ForSQL(nat.Port(fmt.Sprintf("%d/tcp", internalPort)), "postgres", func(host string, port nat.Port) string {
+			return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+				host, port.Port(), cfg.PostgresUser, cfg.PostgresPassword, cfg.PostgresDatabase)
+		}).WithQuery("SELECT 10").WithPollInterval(1000 * time.Millisecond).WithStartupTimeout(20 * time.Minute)
 		database := cfg.PostgresDatabase
 		user := cfg.PostgresUser
 		password := cfg.PostgresPassword
@@ -112,7 +112,7 @@ func SetupPostgres(ctx context.Context, cfg Config) (postgresConn *sqlx.DB, data
 			return nil, "", nil, fmt.Errorf("failed to connect to database after %d retries: %w", maxRetries, err)
 		}
 
-		time.Sleep(time.Second * 5)
+		time.Sleep(time.Second * 10)
 	}
 
 	return postgresConn, databaseUrl, postgresContainer, nil
