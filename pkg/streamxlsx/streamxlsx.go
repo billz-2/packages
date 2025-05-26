@@ -13,27 +13,21 @@ import (
 	"github.com/pkg/errors"
 )
 
-// ExcelLibrary определяет, какую библиотеку использовать для работы с Excel
-
-// MinioClient нужен для абстракции клиента MinIO / S3
 type MinioClient interface {
 	PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64, opts minio.PutObjectOptions) (minio.UploadInfo, error)
 	PresignedGetObject(ctx context.Context, bucketName, objectName string, expirySeconds int64, reqParams map[string]string) (string, error)
 }
 
-// Config для стрима
 type Config struct {
 	BucketName    string
 	ObjectName    string
 	PresignExpire int64 // в секундах, 0 - не генерировать
 }
 
-// Streamer — generic интерфейс
 type Streamer[T any] interface {
 	StreamToMinio(ctx context.Context, dataCh <-chan []T, rowConverter func(row T) []interface{}) (string, error)
 }
 
-// XlsxStreamer реализует Streamer
 type XlsxStreamer[T any] struct {
 	Client MinioClient
 	Config Config
@@ -48,18 +42,13 @@ func (s *XlsxStreamer[T]) StreamToMinio(ctx context.Context, dataCh <-chan []T, 
 
 	pr, pw := io.Pipe()
 
-	// Создаем контекст с возможностью отмены для горутины
 	fileRoutineCtx, fileRoutineCancel := context.WithCancel(ctx)
 	defer fileRoutineCancel() // Гарантированная отмена горутины при выходе
 
-	// Канал для ошибок из горутины
 	errCh := make(chan error, 2)
-
-	// WaitGroup для отслеживания горутин
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	// Запускаем горутину для создания Excel
 	go func() {
 		defer func() {
 			wg.Done()
@@ -71,10 +60,7 @@ func (s *XlsxStreamer[T]) StreamToMinio(ctx context.Context, dataCh <-chan []T, 
 
 		sw := NewExcelStreamWriter(s.Logger)
 
-		// Флаг для отслеживания закрытия канала
-		channelClosed := false
-
-		for !channelClosed {
+		for {
 			select {
 			case <-fileRoutineCtx.Done():
 				s.Logger.Warn("context canceled during stream write", logger.Error(fileRoutineCtx.Err()))
@@ -84,9 +70,7 @@ func (s *XlsxStreamer[T]) StreamToMinio(ctx context.Context, dataCh <-chan []T, 
 
 			case batch, ok := <-dataCh:
 				if !ok {
-					// Канал данных закрыт, завершаем запись
 					s.Logger.Debug("data channel is closed. finishing stream write")
-					channelClosed = true
 
 					if err := sw.Flush(fileRoutineCtx); err != nil {
 						s.Logger.Error("stream writer flush error", logger.Error(err))
@@ -149,7 +133,7 @@ func (s *XlsxStreamer[T]) StreamToMinio(ctx context.Context, dataCh <-chan []T, 
 					rows[i] = rowConverter(item)
 				}
 
-				// Записываем пакет строк через WriteRows с передачей контекста
+				// Записываем остаток пакет строк через WriteRows с передачей контекста
 				if err := sw.WriteRows(fileRoutineCtx, rows[:len(batch)-recordedCount]); err != nil {
 					s.Logger.Error("stream writer rows write error", logger.Error(err))
 					errCh <- errors.Wrap(err, "failed to write rows")
@@ -164,7 +148,6 @@ func (s *XlsxStreamer[T]) StreamToMinio(ctx context.Context, dataCh <-chan []T, 
 	// Загружаем в MinIO
 	info, err := s.Client.PutObject(ctx, s.Config.BucketName, s.Config.ObjectName, pr, -1, minio.PutObjectOptions{})
 
-	// Ожидаем завершения горутины с таймаутом
 	waitDone := make(chan struct{})
 	go func() {
 		wg.Wait()
