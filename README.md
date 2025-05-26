@@ -14,7 +14,7 @@ package for common functions for all microservices
   - docker compose -f docker-compose.test.yml up -d
   - go test ./...
 
-# xlsxstreamer
+# streamxlsx
 
 Пакет для потоковой генерации XLSX-отчётов из данных в Go с записью напрямую в MinIO (S3-совместимый storage).
 
@@ -30,7 +30,7 @@ package for common functions for all microservices
 ## Установка
 
 ```bash
-go get github.com/billz-2/packages/xlsxstreamer
+go get github.com/billz-2/packages/streamxlsx
 ```
 
 ## Пример использования
