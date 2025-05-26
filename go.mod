@@ -2,8 +2,6 @@ module github.com/billz-2/packages
 
 go 1.23.0
 
-toolchain go1.24.2
-
 require (
 	github.com/IBM/sarama v1.45.0
 	github.com/bugsnag/bugsnag-go/v2 v2.5.1
@@ -67,8 +65,6 @@ require (
 	github.com/pelletier/go-toml/v2 v2.2.2 // indirect
 	github.com/philhofer/fwd v1.1.3-0.20240916144458-20a13a1f6b7c // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
-	github.com/plandem/ooxml v1.1.2 // indirect
-	github.com/plandem/xlsx v1.0.4 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
 	github.com/richardlehane/mscfb v1.0.4 // indirect
