@@ -114,7 +114,7 @@ func (s *excelStreamWriterService) WriteRows(ctx context.Context, rows [][]inter
 
 	// Обрабатываем каждую строку с периодической проверкой контекста
 	for i, row := range rows {
-		// Проверяем контекст каждые 50 строк
+		// Проверяем контекст каждые 200 строк
 		if i > 0 && i%200 == 0 {
 			if ctx.Err() != nil {
 				return ctx.Err()
@@ -165,6 +165,7 @@ func (s *excelStreamWriterService) writeRow(row []interface{}) error {
 		case int64:
 		case float64:
 		case bool:
+		case nil:
 			data[i] = v
 		case time.Time:
 			// Для дат можно использовать специальный формат
@@ -172,8 +173,6 @@ func (s *excelStreamWriterService) writeRow(row []interface{}) error {
 				Value:   v.Format("2006-01-02"),
 				StyleID: 0, // ID стиля для даты
 			}
-		case nil:
-			data[i] = nil // Пустая ячейка
 		default:
 			// Для всех остальных типов используем строковое представление
 			data[i] = fmt.Sprintf("%v", v)

@@ -381,18 +381,18 @@ func TestConcurrentWriteOrderPreservation(t *testing.T) {
 	}
 
 	// Буфер для сохранения отправленных данных в порядке их записи
-	sentDataInOrder := make([]testRow, 0, 1000)
+	sentDataInOrder := make([]testRow, 0, 9700)
 
 	// Мьютекс для безопасной записи в общий буфер
 	var sentDataMutex sync.Mutex
 
 	// Канал для передачи данных
-	dataCh := make(chan []testRow, 20)
+	dataCh := make(chan []testRow, 1100)
 
 	// Количество воркеров
 	const numWorkers = 4
 	// Общее количество строк
-	const totalRows = 1000
+	const totalRows = 9700
 
 	// Группа ожидания для всех воркеров
 	var wg sync.WaitGroup
@@ -410,7 +410,7 @@ func TestConcurrentWriteOrderPreservation(t *testing.T) {
 			endRow := startRow + rowsPerWorker
 
 			// Отправляем данные пакетами
-			batchSize := 20
+			batchSize := 1100
 			for i := startRow; i < endRow; i += batchSize {
 				currentBatch := min(batchSize, endRow-i)
 				batch := make([]testRow, currentBatch)

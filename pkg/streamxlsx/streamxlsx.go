@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"reflect"
-	"runtime"
 	"sync"
 	"time"
 
@@ -50,8 +49,8 @@ func (s *XlsxStreamer[T]) StreamToMinio(ctx context.Context, dataCh <-chan []T, 
 	pr, pw := io.Pipe()
 
 	// Создаем контекст с возможностью отмены для горутины
-	goroutineCtx, goroutineCancel := context.WithCancel(ctx)
-	defer goroutineCancel() // Гарантированная отмена горутины при выходе
+	fileRoutineCtx, fileRoutineCancel := context.WithCancel(ctx)
+	defer fileRoutineCancel() // Гарантированная отмена горутины при выходе
 
 	// Канал для ошибок из горутины
 	errCh := make(chan error, 2)
@@ -70,17 +69,17 @@ func (s *XlsxStreamer[T]) StreamToMinio(ctx context.Context, dataCh <-chan []T, 
 			}
 		}()
 
-		sw := NewExcelStreamWriter(s.Logger) // Fallback на excelize
+		sw := NewExcelStreamWriter(s.Logger)
 
 		// Флаг для отслеживания закрытия канала
 		channelClosed := false
 
 		for !channelClosed {
 			select {
-			case <-goroutineCtx.Done():
-				s.Logger.Warn("context canceled during stream write", logger.Error(goroutineCtx.Err()))
-				errCh <- goroutineCtx.Err()
-				_ = pw.CloseWithError(goroutineCtx.Err())
+			case <-fileRoutineCtx.Done():
+				s.Logger.Warn("context canceled during stream write", logger.Error(fileRoutineCtx.Err()))
+				errCh <- fileRoutineCtx.Err()
+				_ = pw.CloseWithError(fileRoutineCtx.Err())
 				return
 
 			case batch, ok := <-dataCh:
@@ -89,14 +88,14 @@ func (s *XlsxStreamer[T]) StreamToMinio(ctx context.Context, dataCh <-chan []T, 
 					s.Logger.Debug("data channel is closed. finishing stream write")
 					channelClosed = true
 
-					if err := sw.Flush(goroutineCtx); err != nil {
+					if err := sw.Flush(fileRoutineCtx); err != nil {
 						s.Logger.Error("stream writer flush error", logger.Error(err))
 						errCh <- errors.Wrap(err, "failed to flush")
 						_ = pw.CloseWithError(err)
 						return
 					}
 
-					if err := sw.WriteFile(goroutineCtx, pw); err != nil {
+					if err := sw.WriteFile(fileRoutineCtx, pw); err != nil {
 						s.Logger.Error("failed to write excel", logger.Error(err))
 						errCh <- errors.Wrap(err, "failed to write excel")
 						_ = pw.CloseWithError(err)
@@ -109,13 +108,15 @@ func (s *XlsxStreamer[T]) StreamToMinio(ctx context.Context, dataCh <-chan []T, 
 
 				// Преобразуем batch в формат, который понимает ExcelStreamWriter
 				rows := make([][]interface{}, len(batch))
+				// Добавляем счетчик для отслеживания фактически записанных строк
+				recordedCount := 0
 
 				// Проверяем контекст периодически во время обработки данных
 				for i, item := range batch {
-					if i > 0 && i%100 == 0 && goroutineCtx.Err() != nil {
+					if i > 0 && i%100 == 0 && fileRoutineCtx.Err() != nil {
 						s.Logger.Warn("context canceled during batch processing", logger.Int("processed_items", i))
-						errCh <- goroutineCtx.Err()
-						_ = pw.CloseWithError(goroutineCtx.Err())
+						errCh <- fileRoutineCtx.Err()
+						_ = pw.CloseWithError(fileRoutineCtx.Err())
 						return
 					}
 
@@ -131,38 +132,31 @@ func (s *XlsxStreamer[T]) StreamToMinio(ctx context.Context, dataCh <-chan []T, 
 
 					// Для очень больших батчей можно выполнять промежуточную запись
 					// для снижения требований к памяти
-					if i > 1000 && i%1000 == 0 {
-						if err := sw.WriteRows(goroutineCtx, rows[:i]); err != nil {
+					if len(batch) > 500 && i > 0 && i%500 == 0 {
+						if err := sw.WriteRows(fileRoutineCtx, rows[:i]); err != nil {
 							s.Logger.Error("stream writer intermediate write error", logger.Error(err))
 							errCh <- errors.Wrap(err, "failed to write intermediate rows")
 							_ = pw.CloseWithError(err)
 							return
 						}
-						// Обнуляем уже записанную часть
-						for j := 0; j < i; j++ {
-							rows[j] = nil
-						}
+
+						// Сбрасываем индекс, начинаем заполнять массив сначала
+						recordedCount += i
+						i = 0
 					}
 
 					// Используем переданный конвертер для получения строки в нужном формате
 					rows[i] = rowConverter(item)
 				}
 
-				// Попробуйте измерить использование памяти до и после вызовов
-				memBefore := new(runtime.MemStats)
-				runtime.ReadMemStats(memBefore)
-
 				// Записываем пакет строк через WriteRows с передачей контекста
-				if err := sw.WriteRows(goroutineCtx, rows); err != nil {
+				if err := sw.WriteRows(fileRoutineCtx, rows[:len(batch)-recordedCount]); err != nil {
 					s.Logger.Error("stream writer rows write error", logger.Error(err))
 					errCh <- errors.Wrap(err, "failed to write rows")
 					_ = pw.CloseWithError(err)
 					return
 				}
 
-				memAfter := new(runtime.MemStats)
-				runtime.ReadMemStats(memAfter)
-				// fmt.Println("Excel Writer. alloc delta:", memAfter.Alloc-memBefore.Alloc, "TotalAlloc delta:", memAfter.TotalAlloc-memBefore.TotalAlloc)
 			}
 		}
 	}()
