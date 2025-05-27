@@ -830,7 +830,7 @@ func BenchmarkStreamToMinio_ConcurrentWrite(b *testing.B) {
 				runtime.ReadMemStats(&mStart)
 
 				// Фиксированное общее количество строк для всех тестов
-				const totalRows = 1000
+				const totalRows = 200000
 				const rowsPerWorker = totalRows / 4 // каждый воркер обрабатывает часть данных
 
 				// Создаем клиент с задержкой сети
@@ -841,7 +841,7 @@ func BenchmarkStreamToMinio_ConcurrentWrite(b *testing.B) {
 
 				// Функция для конвертации данных
 				rowConverter := func(row testRow) []interface{} {
-					return []interface{}{row.A, row.B}
+					return []interface{}{&row.A, &row.B}
 				}
 
 				b.ResetTimer()
@@ -863,7 +863,7 @@ func BenchmarkStreamToMinio_ConcurrentWrite(b *testing.B) {
 							endRow := startRow + rowsPerWorker
 
 							// Разбиваем данные на батчи
-							batchSize := 25
+							batchSize := 1000
 							for i := startRow; i < endRow; i += batchSize {
 								// Проверяем, не вышли ли за границу
 								currentBatch := min(batchSize, endRow-i)

@@ -13,10 +13,6 @@ test-concurrent:
 bench-memory:
 	go test -bench=BenchmarkStreamToMinio_ConcurrentWrite -benchmem -benchtime=2s ./test/... -v
 
-# Сравнение производительности разных excel библиотек
-bench-compare:
-	go test -bench=Benchmark.*Excel.* -benchmem ./test/... -v
-
 # Запуск всех тестов с принудительным игнорированием кэша и подробным выводом
 test-all:
 	go test -count=1 -p 1 ./test/... -v
