@@ -6,6 +6,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"runtime"
 	"strings"
 	"sync"
@@ -150,11 +151,17 @@ func (m *mockMinioClient) PutObject(ctx context.Context, bucketName, objectName 
 	}, nil
 }
 
-func (m *mockMinioClient) PresignedGetObject(ctx context.Context, bucketName, objectName string, expirySeconds int64, reqParams map[string]string) (string, error) {
+func (m *mockMinioClient) PresignedGetObject(ctx context.Context, bucketName, objectName string, expiry time.Duration, reqParams url.Values) (*url.URL, error) {
 	if m.presignError != nil {
-		return "", m.presignError
+		return nil, m.presignError
 	}
-	return m.presignURL, nil
+
+	presignedURL, err := url.Parse(m.presignURL)
+	if err != nil {
+		return nil, err
+	}
+
+	return presignedURL, nil
 }
 
 // Мок для логгера
@@ -209,18 +216,20 @@ func TestXlsxStreamer_StreamToMinio_Success(t *testing.T) {
 		}
 
 		// Создаем канал данных
-		dataCh := make(chan []string)
+		dataCh := make(chan string)
 
 		// Функция конвертации для нового API
-		rowConverter := func(row string) []interface{} {
-			return []interface{}{row}
+		rowConverter := func(row string) [][]interface{} {
+			return [][]interface{}{{row}}
 		}
 
 		// Отправляем данные в отдельной горутине
 		go func() {
 			defer close(dataCh)
-			dataCh <- []string{"Row 1", "Row 2"}
-			dataCh <- []string{"Row 3", "Row 4"}
+			dataCh <- "Row 1"
+			dataCh <- "Row 2"
+			dataCh <- "Row 3"
+			dataCh <- "Row 4"
 		}()
 
 		// Вызываем тестируемую функцию с адаптированным API
@@ -280,7 +289,7 @@ func TestXlsxStreamer_StreamToMinio_ContextCancel(t *testing.T) {
 		}
 
 		// Канал с большим количеством данных
-		dataCh := make(chan []string)
+		dataCh := make(chan string)
 
 		// Отправляем много данных
 		go func() {
@@ -289,7 +298,7 @@ func TestXlsxStreamer_StreamToMinio_ContextCancel(t *testing.T) {
 				select {
 				case <-ctx.Done():
 					return
-				case dataCh <- []string{fmt.Sprintf("Row %d", i)}:
+				case dataCh <- fmt.Sprintf("Row %d", i):
 					// Добавляем задержку, чтобы не забить канал
 					time.Sleep(10 * time.Millisecond)
 				}
@@ -297,8 +306,8 @@ func TestXlsxStreamer_StreamToMinio_ContextCancel(t *testing.T) {
 		}()
 
 		// Новый конвертер для строк
-		rowConverter := func(row string) []interface{} {
-			return []interface{}{row}
+		rowConverter := func(row string) [][]interface{} {
+			return [][]interface{}{{row}}
 		}
 
 		// Вызываем функцию с обновленным API
@@ -343,14 +352,14 @@ func TestXlsxStreamer_StreamToMinio_PutObjectError(t *testing.T) {
 			Logger: mockLogger{},
 		}
 
-		dataCh := make(chan []string)
+		dataCh := make(chan string)
 		go func() {
 			defer close(dataCh)
-			dataCh <- []string{"Row 1"}
+			dataCh <- "Row 1"
 		}()
 
-		rowConverter := func(row string) []interface{} {
-			return []interface{}{row}
+		rowConverter := func(row string) [][]interface{} {
+			return [][]interface{}{{row}}
 		}
 
 		// Вызываем функцию с новым API
@@ -387,7 +396,7 @@ func TestConcurrentWriteOrderPreservation(t *testing.T) {
 	var sentDataMutex sync.Mutex
 
 	// Канал для передачи данных
-	dataCh := make(chan []testRow, 1100)
+	dataCh := make(chan testRowsRequest, 10)
 
 	// Количество воркеров
 	const numWorkers = 4
@@ -429,11 +438,13 @@ func TestConcurrentWriteOrderPreservation(t *testing.T) {
 					sentDataMutex.Unlock()
 				}
 
+				request := testRowsRequest{Rows: batch}
+
 				// Небольшая случайная задержка для имитации асинхронной обработки
 				time.Sleep(time.Duration(rand.Intn(10)) * time.Millisecond)
 
 				select {
-				case dataCh <- batch:
+				case dataCh <- request:
 					// Данные отправлены
 				case <-ctx.Done():
 					return
@@ -449,7 +460,7 @@ func TestConcurrentWriteOrderPreservation(t *testing.T) {
 	}()
 
 	// Создаем стример
-	streamer := &streamxlsx.XlsxStreamer[testRow]{
+	streamer := &streamxlsx.XlsxStreamer[testRowsRequest]{
 		Client: mockClient,
 		Config: streamxlsx.Config{
 			BucketName: "test-bucket",
@@ -459,8 +470,13 @@ func TestConcurrentWriteOrderPreservation(t *testing.T) {
 	}
 
 	// Функция конвертации
-	rowConverter := func(row testRow) []interface{} {
-		return []interface{}{row.A, row.B}
+	// Создаем конвертер и стример один раз
+	rowConverter := func(row testRowsRequest) [][]interface{} {
+		var result [][]interface{}
+		for _, r := range row.Rows {
+			result = append(result, []interface{}{&r.A, &r.B})
+		}
+		return result
 	}
 
 	// Запускаем стриминг
@@ -482,6 +498,10 @@ func TestConcurrentWriteOrderPreservation(t *testing.T) {
 
 	// Если бы был реальный MinIO, мы могли бы здесь загрузить файл и проверить содержимое
 	t.Log("Успешно записано", len(sentDataInOrder), "строк в порядке их поступления")
+}
+
+type testRowsRequest struct {
+	Rows []testRow
 }
 
 // Определение тестовой структуры
@@ -512,15 +532,19 @@ func BenchmarkStreamToMinio_WithDifferentSizes(b *testing.B) {
 				runtime.ReadMemStats(&mStart)
 
 				// Создаем конвертер и стример один раз
-				rowConverter := func(row testRow) []interface{} {
-					return []interface{}{row.A, row.B}
+				rowConverter := func(row testRowsRequest) [][]interface{} {
+					var result [][]interface{}
+					for _, r := range row.Rows {
+						result = append(result, []interface{}{&r.A, &r.B})
+					}
+					return result
 				}
 
 				mockClient := &mockMinioClient{
 					presignURL: "https://example.com/test.xlsx",
 				}
 
-				streamer := &streamxlsx.XlsxStreamer[testRow]{
+				streamer := &streamxlsx.XlsxStreamer[testRowsRequest]{
 					Client: mockClient,
 					Config: streamxlsx.Config{
 						BucketName:    "test-bucket",
@@ -534,7 +558,7 @@ func BenchmarkStreamToMinio_WithDifferentSizes(b *testing.B) {
 				b.ResetTimer()
 				for n := 0; n < b.N; n++ {
 					// Используем буферизованный канал
-					dataCh := make(chan []testRow, 10)
+					dataCh := make(chan testRowsRequest, 10)
 
 					go func() {
 						// Отправляем данные пачками нужного размера
@@ -545,16 +569,16 @@ func BenchmarkStreamToMinio_WithDifferentSizes(b *testing.B) {
 								currentBatchSize = rowSize - i
 							}
 
-							batch := make([]testRow, currentBatchSize)
+							rows := make([]testRow, currentBatchSize)
 							for j := 0; j < currentBatchSize; j++ {
-								batch[j] = testRow{
+								rows[j] = testRow{
 									A: i + j,
 									B: fmt.Sprintf("value-%d", i+j),
 								}
 							}
 
 							// Отправляем батч в канал
-							dataCh <- batch
+							dataCh <- testRowsRequest{Rows: rows}
 						}
 						close(dataCh)
 					}()
@@ -620,15 +644,20 @@ func BenchmarkStreamToMinio_RowSize(b *testing.B) {
 			runtime.ReadMemStats(&mStart)
 
 			// Конвертер и стример
-			rowConverter := func(row testRow) []interface{} {
-				return []interface{}{row.A, row.B}
+			// Создаем конвертер и стример один раз
+			rowConverter := func(row testRowsRequest) [][]interface{} {
+				var result [][]interface{}
+				for _, r := range row.Rows {
+					result = append(result, []interface{}{&r.A, &r.B})
+				}
+				return result
 			}
 
 			mockClient := &mockMinioClient{
 				presignURL: "https://example.com/test.xlsx",
 			}
 
-			streamer := &streamxlsx.XlsxStreamer[testRow]{
+			streamer := &streamxlsx.XlsxStreamer[testRowsRequest]{
 				Client: mockClient,
 				Config: streamxlsx.Config{
 					BucketName: "test-bucket",
@@ -641,19 +670,21 @@ func BenchmarkStreamToMinio_RowSize(b *testing.B) {
 
 			b.ResetTimer()
 			for n := 0; n < b.N; n++ {
-				dataCh := make(chan []testRow, 10)
+				dataCh := make(chan testRowsRequest, 10)
 
 				go func() {
 					batchSize := 100
-					for i := 0; i < rowCount; i += batchSize {
-						batch := make([]testRow, 0, batchSize)
+					batch := make([]testRow, 0, batchSize)
 
+					for i := 0; i < rowCount; i += batchSize {
 						for j := 0; j < batchSize && i+j < rowCount; j++ {
 							batch = append(batch, dt.rowMaker(i+j))
 						}
-
-						dataCh <- batch
 					}
+
+					request := testRowsRequest{Rows: batch}
+					dataCh <- request
+
 					close(dataCh)
 				}()
 
@@ -692,12 +723,15 @@ func BenchmarkStreamToMinio_WithNetworkDelay(b *testing.B) {
 					forcedReadDelay: delay, // Имитация сетевой задержки
 				}
 
-				// Конвертер для данных
-				rowConverter := func(row testRow) []interface{} {
-					return []interface{}{&row.A, &row.B}
+				rowConverter := func(row testRowsRequest) [][]interface{} {
+					var result [][]interface{}
+					for _, r := range row.Rows {
+						result = append(result, []interface{}{&r.A, &r.B})
+					}
+					return result
 				}
 
-				streamer := &streamxlsx.XlsxStreamer[testRow]{
+				streamer := &streamxlsx.XlsxStreamer[testRowsRequest]{
 					Client: mockClient,
 					Config: streamxlsx.Config{
 						BucketName: "test-bucket",
@@ -708,7 +742,7 @@ func BenchmarkStreamToMinio_WithNetworkDelay(b *testing.B) {
 
 				b.ResetTimer()
 				for n := 0; n < b.N; n++ {
-					dataCh := make(chan []testRow, 10)
+					dataCh := make(chan testRowsRequest, 10)
 
 					go func() {
 						defer close(dataCh)
@@ -727,7 +761,11 @@ func BenchmarkStreamToMinio_WithNetworkDelay(b *testing.B) {
 
 							// Имитация задержки обработки данных
 							time.Sleep(1 * time.Millisecond)
-							dataCh <- batch
+							request := testRowsRequest{
+								Rows: batch,
+							}
+
+							dataCh <- request
 						}
 					}()
 
@@ -759,15 +797,19 @@ func BenchmarkStreamToMinio_ChannelBufferSize(b *testing.B) {
 			runtime.GC()
 			runtime.ReadMemStats(&mStart)
 
-			rowConverter := func(row testRow) []interface{} {
-				return []interface{}{row.A, row.B}
+			rowConverter := func(row testRowsRequest) [][]interface{} {
+				var result [][]interface{}
+				for _, r := range row.Rows {
+					result = append(result, []interface{}{&r.A, &r.B})
+				}
+				return result
 			}
 
 			mockClient := &mockMinioClient{
 				presignURL: "https://example.com/test.xlsx",
 			}
 
-			streamer := &streamxlsx.XlsxStreamer[testRow]{
+			streamer := &streamxlsx.XlsxStreamer[testRowsRequest]{
 				Client: mockClient,
 				Config: streamxlsx.Config{
 					BucketName: "test-bucket",
@@ -782,7 +824,7 @@ func BenchmarkStreamToMinio_ChannelBufferSize(b *testing.B) {
 			b.ResetTimer()
 			for n := 0; n < b.N; n++ {
 				// Канал с разным размером буфера
-				dataCh := make(chan []testRow, bufSize)
+				dataCh := make(chan testRowsRequest, bufSize)
 
 				go func() {
 					defer close(dataCh)
@@ -795,7 +837,9 @@ func BenchmarkStreamToMinio_ChannelBufferSize(b *testing.B) {
 							batch[j] = testRow{A: i + j, B: "test"}
 						}
 
-						dataCh <- batch
+						request := testRowsRequest{Rows: batch}
+
+						dataCh <- request
 					}
 				}()
 
@@ -840,13 +884,17 @@ func BenchmarkStreamToMinio_ConcurrentWrite(b *testing.B) {
 				}
 
 				// Функция для конвертации данных
-				rowConverter := func(row testRow) []interface{} {
-					return []interface{}{&row.A, &row.B}
+				rowConverter := func(row testRowsRequest) [][]interface{} {
+					var result [][]interface{}
+					for _, r := range row.Rows {
+						result = append(result, []interface{}{&r.A, &r.B})
+					}
+					return result
 				}
 
 				b.ResetTimer()
 				for n := 0; n < b.N; n++ {
-					dataCh := make(chan []testRow, workers*2) // Буфер пропорциональный числу воркеров
+					dataCh := make(chan testRowsRequest, workers*2) // Буфер пропорциональный числу воркеров
 
 					// Создаем группу ожидания для синхронизации воркеров
 					var wg sync.WaitGroup
@@ -878,7 +926,8 @@ func BenchmarkStreamToMinio_ConcurrentWrite(b *testing.B) {
 
 								// Имитируем задержку обработки
 								time.Sleep(5 * time.Millisecond)
-								dataCh <- batch
+								request := testRowsRequest{Rows: batch}
+								dataCh <- request
 							}
 						}()
 					}
@@ -890,7 +939,7 @@ func BenchmarkStreamToMinio_ConcurrentWrite(b *testing.B) {
 					}()
 
 					// Создаем стример и отправляем данные
-					streamer := &streamxlsx.XlsxStreamer[testRow]{
+					streamer := &streamxlsx.XlsxStreamer[testRowsRequest]{
 						Client: mockClient,
 						Config: streamxlsx.Config{
 							BucketName: "test-bucket",
