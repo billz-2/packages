@@ -109,14 +109,17 @@ func (s *XlsxStreamer[T]) StreamToMinio(ctx context.Context, dataCh <-chan T, ro
 					// Для очень больших батчей можно выполнять промежуточную запись
 					// для снижения требований к памяти
 					if i > 0 && i%500 == 0 {
-						if err := sw.WriteRows(fileRoutineCtx, converted[:i-processedCount]); err != nil {
+						if err := sw.WriteRows(fileRoutineCtx, converted[processedCount:i]); err != nil {
 							s.Logger.Error("stream writer intermediate write error", logger.Error(err))
 							_ = pw.CloseWithError(err)
 
 							return
 						}
 
-						// сбрасывание счетчика для следующей порции
+						for j := processedCount; j < i; j++ {
+							converted[j] = nil
+						}
+
 						processedCount = i
 					}
 				}
@@ -125,7 +128,7 @@ func (s *XlsxStreamer[T]) StreamToMinio(ctx context.Context, dataCh <-chan T, ro
 				remainingRows := len(converted) - processedCount
 				if remainingRows > 0 {
 					// Записываем остаток пакет строк через WriteRows с передачей контекста
-					if err := sw.WriteRows(fileRoutineCtx, converted[:remainingRows]); err != nil {
+					if err := sw.WriteRows(fileRoutineCtx, converted[processedCount:]); err != nil {
 						s.Logger.Error("stream writer rows write error", logger.Error(err))
 						_ = pw.CloseWithError(err)
 
