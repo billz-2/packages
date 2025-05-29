@@ -21,7 +21,7 @@ type MinioClient interface {
 type Config struct {
 	BucketName    string
 	ObjectName    string
-	PresignExpire int64 // в секундах, 0 - не генерировать
+	PresignExpire time.Duration // в секундах, 0 - не генерировать
 }
 
 type Streamer[T any] interface {
@@ -149,7 +149,7 @@ func (s *XlsxStreamer[T]) StreamToMinio(ctx context.Context, dataCh <-chan T, ro
 	// Генерируем пресайн URL при необходимости
 	if s.Config.PresignExpire > 0 {
 		s.Logger.Debug("stream writer presign url generate")
-		fUrl, err := s.Client.PresignedGetObject(ctx, s.Config.BucketName, s.Config.ObjectName, time.Duration(s.Config.PresignExpire), nil)
+		fUrl, err := s.Client.PresignedGetObject(ctx, s.Config.BucketName, s.Config.ObjectName, s.Config.PresignExpire, nil)
 		if err != nil {
 			s.Logger.Error("stream writer presign url generation failed", logger.Error(err))
 			return "", errors.Wrap(err, "minio url presign failed")
