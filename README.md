@@ -60,102 +60,88 @@ type UserRecord struct {
 }
 
 func main() {
-  // Инициализация логгера
-  log := logger.NewZapLogger()
-
-  // Настройка MinIO клиента
-  minioClient, err := minio.New("minio.example.com:9000", &minio.Options{
-    Creds:  credentials.NewStaticV4("minioadmin", "minioadmin", ""),
-    Secure: true,
+  client, err := minio.New("localhost:9099", &minio.Options{
+    Creds:  credentials.NewStaticV4("test", "test", ""),
+    Secure: false,
   })
+
   if err != nil {
-    log.Fatal("Cannot initialize MinIO client", logger.Error(err))
+    fmt.Println("Error creating MinIO client:", err)
+    return
   }
 
-  // Настройка конфигурации для экспорта
-  config := streamxlsx.Config{
-    BucketName:    "reports",
-    ObjectName:    fmt.Sprintf("users-export-%s.xlsx", time.Now().Format("2006-01-02")),
-    PresignExpire: 3600, // URL будет действителен 1 час
+  streamer := &streamxlsx.XlsxStreamer[testRow]{
+    Client: client,
+    Config: streamxlsx.Config{
+      BucketName:    "excel",
+      ObjectName:    "book-temp-2-test",
+      PresignExpire: time.Hour,
+    },
+    Logger: logger.New(logger.LevelInfo, "billz_packages"),
   }
 
-  // Создание XlsxStreamer
-  streamer := &streamxlsx.XlsxStreamer[UserRecord]{
-    Client: minioClient,
-    Config: config,
-    Logger: log,
+  testChan := make(chan testRow, 300)
+
+  var headers [50]string
+
+  for colID := 0; colID < 50; colID++ {
+    headers[colID] = fmt.Sprintf("Column %d", colID+1)
   }
 
-  // Создание канала данных
-  dataCh := make(chan []UserRecord)
+  var req testRow
+  rows := make([][]interface{}, 0, 300000)
+  for rowID := 0; rowID < 300000; rowID++ {
+    row := make([]interface{}, 50)
+    for colID := 0; colID < 50; colID++ {
+      row[colID] = rand.Intn(640000)
+    }
 
-  // Функция для конвертации UserRecord в строку Excel
-  rowConverter := func(user UserRecord) []interface{} {
-    return []interface{}{
-      user.ID,
-      user.Name,
-      user.Email,
-      user.CreatedAt,
-      user.IsActive,
-      user.Balance,
+    rows = append(rows, row)
+
+    if rowID > 0 && rowID%1000 == 0 {
+      if rowID/1000 == 1 {
+        req.Rows = rows[0:1000]
+        testChan <- req
+      } else {
+        req.Rows = rows[1000*(rowID/1000-1) : 1000*rowID/1000]
+        testChan <- req
+      }
     }
   }
 
-  // Контекст с таймаутом для всей операции
-  ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-  defer cancel()
+  close(testChan)
 
-  // Запускаем асинхронную обработку в отдельной горутине
-  go func() {
-    defer close(dataCh) // Важно закрыть канал по завершении!
-
-    // Первый батч - заголовки (можно записать отдельно)
-    headers := []UserRecord{{
-      Name:    "ID",
-      Email:   "Имя",
-      Balance: 0, // Место для "Email"
-      // остальные поля будут пустыми
-    }}
-    dataCh <- headers
-
-    // Имитация получения данных батчами
-    for i := 0; i < 5; i++ {
-      // Создаем батч из 1000 записей
-      batch := make([]UserRecord, 0, 1000)
-      for j := 0; j < 1000; j++ {
-        user := UserRecord{
-          ID:        int64(i*1000 + j),
-          Name:      fmt.Sprintf("User %d", i*1000+j),
-          Email:     fmt.Sprintf("user%d@example.com", i*1000+j),
-          CreatedAt: time.Now().AddDate(0, 0, -j),
-          IsActive:  j%5 != 0, // каждый пятый неактивен
-          Balance:   float64(j) * 10.5,
-        }
-        batch = append(batch, user)
-      }
-
-      // Проверка отмены контекста перед отправкой
-      if ctx.Err() != nil {
-        log.Warn("Context canceled, stopping data generation", logger.Error(ctx.Err()))
-        return
-      }
-
-      // Отправляем батч в канал
-      dataCh <- batch
-
-      // Имитация задержки обработки данных
-      time.Sleep(100 * time.Millisecond)
+  rowConverter := func(req testRow) [][]interface{} {
+    if len(req.Rows) == 0 {
+      return nil
     }
 
-    log.Info("All data batches sent to channel")
-  }()
-
-  // Запускаем стриминг данных в MinIO
-  downloadURL, err := streamer.StreamToMinio(ctx, "Users", dataCh, rowConverter)
-  if err != nil {
-    log.Fatal("Failed to stream data to MinIO", logger.Error(err))
+    return req.Rows
   }
 
-  log.Info("Export completed successfully", logger.String("download_url", downloadURL))
+  fileName, err := streamer.StreamTempToMinio(context.Background(), testChan, headers[:], rowConverter)
+  fmt.Println(fileName)
+
+  return
 }
 ```
+
+# Mem allocation check for 2 streaming ways 300000 rows with 50 cells per row synthetic data:
+## StreamTempToMinio - streaming to temp file and then upload to MinIO
+```bash
+1370.6670608520508 MB_allocated
+1830.7966079711914 MB_total_allocated
+9 GC_cycles
+```
+## StreamPipeToMinio - streaming directly to MinIO via io.Pipe
+```bash
+2052.8324432373047 MB_allocated
+2356.0320434570312 MB_total_allocated
+8 GC_cycles
+```
+## Conclusion
+Though streaming via pipe should be more memory efficient MiniO makes huge memory buffer around 600 MB when does not 
+know the file size, and buffer grows wth every write operation that goes out of memory limits. As we can see memory allocation
+differs less than 600 MB.
+
+
