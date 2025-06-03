@@ -16,6 +16,7 @@ import (
 	"github.com/billz-2/packages/pkg/logger"
 	"github.com/billz-2/packages/pkg/streamxlsx"
 	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -185,6 +186,168 @@ func init() {
 	}()
 }
 
+func TestXlsxStreamer_StreamTempToMinio_SuccessWithRealMinio(t *testing.T) {
+	// Таймаут для всего теста
+	testCtx, testCancel := context.WithTimeout(context.Background(), 1*time.Hour)
+	defer testCancel()
+
+	// Добавляем больше логирования
+	t.Log("Тест начался:", time.Now())
+
+	var mStart, mEnd runtime.MemStats
+
+	// Очистка памяти перед каждым тестом
+	runtime.GC()
+	runtime.ReadMemStats(&mStart)
+
+	// Завершающий канал
+	testDone := make(chan struct{})
+
+	go func() {
+		defer close(testDone)
+
+		client, err := minio.New("localhost:9099", &minio.Options{
+			Creds:  credentials.NewStaticV4("2wjyybzuy3g4ednkmpgmhczzdvfbk87d", "tgetjnczdxx9engvkthsy8cy8p25yqmz", ""),
+			Secure: false,
+		})
+
+		// Создаем клиент и стример
+		/*mockClient := &mockMinioClient{
+			presignURL: "https://example.com/test.xlsx",
+		}*/
+
+		streamer := &streamxlsx.XlsxStreamer[string]{
+			Client: client,
+			Config: streamxlsx.Config{
+				BucketName:    "excel",
+				ObjectName:    "test_1.xlsx",
+				PresignExpire: time.Hour,
+			},
+			Logger: mockLogger{},
+		}
+
+		// Создаем канал данных
+		dataCh := make(chan string)
+
+		// Функция конвертации для нового API
+		rowConverter := func(row string) [][]interface{} {
+			return [][]interface{}{{row}}
+		}
+
+		// Отправляем данные в отдельной горутине
+		go func() {
+			defer close(dataCh)
+			dataCh <- "Row 1"
+			dataCh <- "Row 2"
+			dataCh <- "Row 3"
+			dataCh <- "Row 4"
+		}()
+
+		// Вызываем тестируемую функцию с адаптированным API
+		_, err = streamer.StreamTempToMinio(context.Background(), dataCh, []string{"test"}, rowConverter)
+		require.NoError(t, err)
+	}()
+
+	// Проверяем, что тест не зависает
+	select {
+	case <-testDone:
+		t.Log("Тест успешно завершился")
+	case <-testCtx.Done():
+		t.Fatal("Тест завис и был принудительно остановлен")
+	}
+
+	t.Log("Функция StreamTempToMinio завершилась:", time.Now())
+
+	runtime.ReadMemStats(&mEnd)
+
+	t.Log(float64(mEnd.Alloc-mStart.Alloc)/1024/1024, "MB_allocated")
+	t.Log(float64(mEnd.TotalAlloc-mStart.TotalAlloc)/1024/1024, "MB_total_allocated")
+	t.Log(float64(mEnd.NumGC-mStart.NumGC), "GC_cycles")
+	t.Log(float64(4), "total_rows")
+	t.Log(float64(4), "batch_size")
+}
+
+func TestXlsxStreamer_StreamPipeToMinio_SuccessWithRealMinio(t *testing.T) {
+	// Таймаут для всего теста
+	testCtx, testCancel := context.WithTimeout(context.Background(), 1*time.Hour)
+	defer testCancel()
+
+	// Добавляем больше логирования
+	t.Log("Тест начался:", time.Now())
+
+	var mStart, mEnd runtime.MemStats
+
+	// Очистка памяти перед каждым тестом
+	runtime.GC()
+	runtime.ReadMemStats(&mStart)
+
+	// Завершающий канал
+	testDone := make(chan struct{})
+
+	go func() {
+		defer close(testDone)
+
+		client, err := minio.New("localhost:9099", &minio.Options{
+			Creds:  credentials.NewStaticV4("2wjyybzuy3g4ednkmpgmhczzdvfbk87d", "tgetjnczdxx9engvkthsy8cy8p25yqmz", ""),
+			Secure: false,
+		})
+
+		// Создаем клиент и стример
+		/*mockClient := &mockMinioClient{
+			presignURL: "https://example.com/test.xlsx",
+		}*/
+
+		streamer := &streamxlsx.XlsxStreamer[string]{
+			Client: client,
+			Config: streamxlsx.Config{
+				BucketName:    "excel",
+				ObjectName:    "test_1.xlsx",
+				PresignExpire: time.Hour,
+			},
+			Logger: mockLogger{},
+		}
+
+		// Создаем канал данных
+		dataCh := make(chan string)
+
+		// Функция конвертации для нового API
+		rowConverter := func(row string) [][]interface{} {
+			return [][]interface{}{{row}}
+		}
+
+		// Отправляем данные в отдельной горутине
+		go func() {
+			defer close(dataCh)
+			dataCh <- "Row 1"
+			dataCh <- "Row 2"
+			dataCh <- "Row 3"
+			dataCh <- "Row 4"
+		}()
+
+		// Вызываем тестируемую функцию с адаптированным API
+		_, err = streamer.StreamPipeToMinio(context.Background(), dataCh, []string{"test"}, rowConverter)
+		require.NoError(t, err)
+	}()
+
+	// Проверяем, что тест не зависает
+	select {
+	case <-testDone:
+		t.Log("Тест успешно завершился")
+	case <-testCtx.Done():
+		t.Fatal("Тест завис и был принудительно остановлен")
+	}
+
+	t.Log("Функция StreamTempToMinio завершилась:", time.Now())
+
+	runtime.ReadMemStats(&mEnd)
+
+	t.Log(float64(mEnd.Alloc-mStart.Alloc)/1024/1024, "MB_allocated")
+	t.Log(float64(mEnd.TotalAlloc-mStart.TotalAlloc)/1024/1024, "MB_total_allocated")
+	t.Log(float64(mEnd.NumGC-mStart.NumGC), "GC_cycles")
+	t.Log(float64(4), "total_rows")
+	t.Log(float64(4), "batch_size")
+}
+
 // Тест успешного экспорта
 func TestXlsxStreamer_StreamToMinio_Success(t *testing.T) {
 	// Таймаут для всего теста
@@ -210,7 +373,7 @@ func TestXlsxStreamer_StreamToMinio_Success(t *testing.T) {
 			Config: streamxlsx.Config{
 				BucketName:    "test-bucket",
 				ObjectName:    "test.xlsx",
-				PresignExpire: 3600,
+				PresignExpire: time.Hour,
 			},
 			Logger: mockLogger{},
 		}
@@ -233,7 +396,7 @@ func TestXlsxStreamer_StreamToMinio_Success(t *testing.T) {
 		}()
 
 		// Вызываем тестируемую функцию с адаптированным API
-		url, err := streamer.StreamToMinio(context.Background(), dataCh, rowConverter)
+		url, err := streamer.StreamTempToMinio(context.Background(), dataCh, []string{"test"}, rowConverter)
 		require.NoError(t, err)
 		assert.Equal(t, "https://example.com/test.xlsx", url)
 		assert.True(t, mockClient.putObjectCalled)
@@ -247,7 +410,7 @@ func TestXlsxStreamer_StreamToMinio_Success(t *testing.T) {
 		t.Fatal("Тест завис и был принудительно остановлен")
 	}
 
-	t.Log("Функция StreamToMinio завершилась:", time.Now())
+	t.Log("Функция StreamTempToMinio завершилась:", time.Now())
 }
 
 // Тест отмены контекста
@@ -311,7 +474,7 @@ func TestXlsxStreamer_StreamToMinio_ContextCancel(t *testing.T) {
 		}
 
 		// Вызываем функцию с обновленным API
-		_, err := streamer.StreamToMinio(ctx, dataCh, rowConverter)
+		_, err := streamer.StreamTempToMinio(ctx, dataCh, []string{"test"}, rowConverter)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "context")
 	}()
@@ -363,7 +526,7 @@ func TestXlsxStreamer_StreamToMinio_PutObjectError(t *testing.T) {
 		}
 
 		// Вызываем функцию с новым API
-		_, err := streamer.StreamToMinio(context.Background(), dataCh, rowConverter)
+		_, err := streamer.StreamTempToMinio(context.Background(), dataCh, []string{"test"}, rowConverter)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "put object failed")
 	}()
@@ -480,7 +643,7 @@ func TestConcurrentWriteOrderPreservation(t *testing.T) {
 	}
 
 	// Запускаем стриминг
-	_, err := streamer.StreamToMinio(ctx, dataCh, rowConverter)
+	_, err := streamer.StreamTempToMinio(ctx, dataCh, []string{"test A", "test B"}, rowConverter)
 	require.NoError(t, err)
 
 	// Проверяем, что данные были отправлены в правильном порядке
@@ -511,9 +674,9 @@ type testRow struct {
 }
 
 // Бенчмарк с разными размерами данных и размерами батчей
-func BenchmarkStreamToMinio_WithDifferentSizes(b *testing.B) {
+func BenchmarkStreamTempToMinio_WithDifferentSizes(b *testing.B) {
 	// Тестируем разное количество строк
-	rowSizes := []int{100, 1000, 10000}
+	rowSizes := []int{100, 1000, 10000, 100000, 1000000}
 	// Тестируем разные размеры батчей
 	batchSizes := []int{10, 100, 1000}
 
@@ -584,9 +747,103 @@ func BenchmarkStreamToMinio_WithDifferentSizes(b *testing.B) {
 					}()
 
 					// Вызываем тестируемую функцию
-					_, err := streamer.StreamToMinio(context.Background(), dataCh, rowConverter)
+					_, err := streamer.StreamTempToMinio(context.Background(), dataCh, []string{"test A", "test B"}, rowConverter)
 					if err != nil {
-						b.Fatalf("StreamToMinio error: %v", err)
+						b.Fatalf("StreamTempToMinio error: %v", err)
+					}
+				}
+
+				// Замеряем метрики памяти после завершения теста
+				b.StopTimer()
+				runtime.ReadMemStats(&mEnd)
+
+				// Отчет о метриках
+				b.ReportMetric(float64(mEnd.Alloc-mStart.Alloc)/1024/1024, "MB_allocated")
+				b.ReportMetric(float64(mEnd.TotalAlloc-mStart.TotalAlloc)/1024/1024, "MB_total_allocated")
+				b.ReportMetric(float64(mEnd.NumGC-mStart.NumGC), "GC_cycles")
+				b.ReportMetric(float64(rowSize), "total_rows")
+				b.ReportMetric(float64(batchSize), "batch_size")
+			})
+		}
+	}
+}
+
+func BenchmarkStreamPipeToMinio_WithDifferentSizes(b *testing.B) {
+	// Тестируем разное количество строк
+	rowSizes := []int{100, 1000, 10000, 100000, 1000000}
+	// Тестируем разные размеры батчей
+	batchSizes := []int{10, 100, 1000}
+
+	for _, rowSize := range rowSizes {
+		for _, batchSize := range batchSizes {
+			// Пропускаем нерелевантные комбинации
+			if batchSize > rowSize {
+				continue
+			}
+
+			b.Run(fmt.Sprintf("Rows-%d_Batch-%d", rowSize, batchSize), func(b *testing.B) {
+				var mStart, mEnd runtime.MemStats
+
+				// Очистка памяти перед каждым тестом
+				runtime.GC()
+				runtime.ReadMemStats(&mStart)
+
+				// Создаем конвертер и стример один раз
+				rowConverter := func(row testRowsRequest) [][]interface{} {
+					var result [][]interface{}
+					for _, r := range row.Rows {
+						result = append(result, []interface{}{&r.A, &r.B})
+					}
+					return result
+				}
+
+				mockClient := &mockMinioClient{
+					presignURL: "https://example.com/test.xlsx",
+				}
+
+				streamer := &streamxlsx.XlsxStreamer[testRowsRequest]{
+					Client: mockClient,
+					Config: streamxlsx.Config{
+						BucketName:    "test-bucket",
+						ObjectName:    "test.xlsx",
+						PresignExpire: 3600,
+					},
+					Logger: mockLogger{},
+				}
+
+				// Основной цикл бенчмарка
+				b.ResetTimer()
+				for n := 0; n < b.N; n++ {
+					// Используем буферизованный канал
+					dataCh := make(chan testRowsRequest, 10)
+
+					go func() {
+						// Отправляем данные пачками нужного размера
+						for i := 0; i < rowSize; i += batchSize {
+							// Вычисляем размер текущего батча
+							currentBatchSize := batchSize
+							if i+currentBatchSize > rowSize {
+								currentBatchSize = rowSize - i
+							}
+
+							rows := make([]testRow, currentBatchSize)
+							for j := 0; j < currentBatchSize; j++ {
+								rows[j] = testRow{
+									A: i + j,
+									B: fmt.Sprintf("value-%d", i+j),
+								}
+							}
+
+							// Отправляем батч в канал
+							dataCh <- testRowsRequest{Rows: rows}
+						}
+						close(dataCh)
+					}()
+
+					// Вызываем тестируемую функцию
+					_, err := streamer.StreamPipeToMinio(context.Background(), dataCh, []string{"test A", "test B"}, rowConverter)
+					if err != nil {
+						b.Fatalf("StreamTempToMinio error: %v", err)
 					}
 				}
 
@@ -688,9 +945,9 @@ func BenchmarkStreamToMinio_RowSize(b *testing.B) {
 					close(dataCh)
 				}()
 
-				_, err := streamer.StreamToMinio(context.Background(), dataCh, rowConverter)
+				_, err := streamer.StreamTempToMinio(context.Background(), dataCh, []string{"test A", "test B"}, rowConverter)
 				if err != nil {
-					b.Fatalf("StreamToMinio error: %v", err)
+					b.Fatalf("StreamTempToMinio error: %v", err)
 				}
 			}
 
@@ -769,9 +1026,9 @@ func BenchmarkStreamToMinio_WithNetworkDelay(b *testing.B) {
 						}
 					}()
 
-					_, err := streamer.StreamToMinio(context.Background(), dataCh, rowConverter)
+					_, err := streamer.StreamTempToMinio(context.Background(), dataCh, []string{"test A", "test B"}, rowConverter)
 					if err != nil {
-						b.Fatalf("StreamToMinio error: %v", err)
+						b.Fatalf("StreamTempToMinio error: %v", err)
 					}
 				}
 
@@ -843,9 +1100,9 @@ func BenchmarkStreamToMinio_ChannelBufferSize(b *testing.B) {
 					}
 				}()
 
-				_, err := streamer.StreamToMinio(context.Background(), dataCh, rowConverter)
+				_, err := streamer.StreamTempToMinio(context.Background(), dataCh, []string{"test A", "test B"}, rowConverter)
 				if err != nil {
-					b.Fatalf("StreamToMinio error: %v", err)
+					b.Fatalf("StreamTempToMinio error: %v", err)
 				}
 			}
 
@@ -949,9 +1206,9 @@ func BenchmarkStreamToMinio_ConcurrentWrite(b *testing.B) {
 					}
 
 					// Запускаем процесс стриминга
-					_, err := streamer.StreamToMinio(context.Background(), dataCh, rowConverter)
+					_, err := streamer.StreamTempToMinio(context.Background(), dataCh, []string{"test A", "test B"}, rowConverter)
 					if err != nil {
-						b.Fatalf("StreamToMinio error: %v", err)
+						b.Fatalf("StreamTempToMinio error: %v", err)
 					}
 				}
 

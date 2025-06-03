@@ -5,13 +5,18 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"os"
 	"reflect"
 	"time"
 
 	"github.com/billz-2/packages/pkg/logger"
+	"github.com/google/uuid"
 	"github.com/minio/minio-go/v7"
 	"github.com/pkg/errors"
+	"github.com/xuri/excelize/v2"
 )
+
+const excelContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 type MinioClient interface {
 	PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64, opts minio.PutObjectOptions) (minio.UploadInfo, error)
@@ -25,7 +30,7 @@ type Config struct {
 }
 
 type Streamer[T any] interface {
-	StreamToMinio(ctx context.Context, dataCh <-chan T, rowConverter func(row T) [][]interface{}) (string, error)
+	StreamTempToMinio(ctx context.Context, dataCh <-chan T, headers []string, rowConverter func(row T) [][]interface{}) (string, error)
 }
 
 type XlsxStreamer[T any] struct {
@@ -35,119 +40,118 @@ type XlsxStreamer[T any] struct {
 }
 
 // StreamToMinio стримит данные из dataCh в xlsx, загружает в MinIO и возвращает ссылку или ключ
-func (s *XlsxStreamer[T]) StreamToMinio(ctx context.Context, dataCh <-chan T, rowConverter func(row T) [][]interface{}) (string, error) {
+func (s *XlsxStreamer[T]) StreamTempToMinio(ctx context.Context, dataCh <-chan T, headers []string, rowConverter func(row T) [][]interface{}) (string, error) {
 	var t T
 	typeName := reflect.TypeOf(t)
-	s.Logger.DebugWithCtx(ctx, fmt.Sprintf("%v.StreamToMinio", typeName))
+	s.Logger.DebugWithCtx(ctx, fmt.Sprintf("%v.StreamTempToMinio", typeName))
 
-	pr, pw := io.Pipe()
-	fileRoutineCtx, fileRoutineCancel := context.WithCancel(ctx)
-
-	defer func(reader *io.PipeReader) {
-		fileRoutineCancel()
-		err := reader.Close()
-		if err != nil {
-			s.Logger.Error("stream writer pipe reader close error", logger.Error(err))
-		}
-	}(pr)
-
-	go func() {
-		defer func() {
-			err := pw.Close()
-			if err != nil {
-				s.Logger.Warn("stream writer. pipe writer close error", logger.Error(err))
-			}
-		}()
-
-		sw := NewExcelStreamWriter(s.Logger)
-
-		for {
-			select {
-			case <-fileRoutineCtx.Done():
-				s.Logger.Warn("context canceled during stream write", logger.Error(fileRoutineCtx.Err()))
-				_ = pw.CloseWithError(fileRoutineCtx.Err())
-
-				return
-
-			case rec, ok := <-dataCh:
-				if !ok {
-					s.Logger.Debug("data channel is closed. finishing stream write")
-
-					if err := sw.Flush(fileRoutineCtx); err != nil {
-						s.Logger.Error("stream writer flush error", logger.Error(err))
-						_ = pw.CloseWithError(err)
-
-						return
-					}
-
-					if err := sw.WriteFile(fileRoutineCtx, pw); err != nil {
-						s.Logger.Error("stream writer write file error", logger.Error(err))
-						_ = pw.CloseWithError(err)
-
-						return
-					}
-
-					s.Logger.Debug("excel file written to pipe successfully")
-					return
-				}
-
-				// Преобразуем запись с помощью rowConverter
-				converted := rowConverter(rec)
-
-				// Добавляем счетчик для отслеживания фактически записанных строк
-				processedCount := 0
-
-				// Проверяем контекст периодически во время обработки данных
-				for i := range converted {
-					if i > 0 && i%100 == 0 && fileRoutineCtx.Err() != nil {
-						s.Logger.Warn("context canceled during batch processing", logger.Int("processed_items", i))
-						_ = pw.CloseWithError(fileRoutineCtx.Err())
-
-						return
-					}
-
-					// Для очень больших батчей можно выполнять промежуточную запись
-					// для снижения требований к памяти
-					if i > 0 && i%500 == 0 {
-						if err := sw.WriteRows(fileRoutineCtx, converted[processedCount:i]); err != nil {
-							s.Logger.Error("stream writer intermediate write error", logger.Error(err))
-							_ = pw.CloseWithError(err)
-
-							return
-						}
-
-						for j := processedCount; j < i; j++ {
-							converted[j] = nil
-						}
-
-						processedCount = i
-					}
-				}
-
-				// Записываем остаток пакета строк
-				remainingRows := len(converted) - processedCount
-				if remainingRows > 0 {
-					// Записываем остаток пакет строк через WriteRows с передачей контекста
-					if err := sw.WriteRows(fileRoutineCtx, converted[processedCount:]); err != nil {
-						s.Logger.Error("stream writer rows write error", logger.Error(err))
-						_ = pw.CloseWithError(err)
-
-						return
-					}
-				}
-			}
+	f := excelize.NewFile()
+	defer func() {
+		if err := f.Close(); err != nil {
+			fmt.Println(err)
 		}
 	}()
 
+	sw, err := f.NewStreamWriter("Sheet1")
+	if err != nil {
+		s.Logger.Error("stream writer. excel stream writer failed to create", logger.Error(err))
+		return "", errors.Wrap(err, "failed to create stream writer")
+	}
+
+	headerCells := make([]interface{}, len(headers))
+	for i, header := range headers {
+		headerCells[i] = excelize.Cell{Value: header}
+	}
+
+	err = sw.SetRow("A1", headerCells)
+	if err != nil {
+		s.Logger.Error("stream writer error on headers set row", logger.Error(err))
+		return "", errors.Wrap(err, "stream writer headers set row failed")
+	}
+
+	yAxis := 2
+
+	for data := range dataCh {
+		// Проверяем отмену контекста перед операцией
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+
+		rows := rowConverter(data)
+		if len(rows) == 0 {
+			continue
+		}
+
+		for _, row := range rows {
+			rowToCells(row)
+			cell, err := excelize.CoordinatesToCellName(1, yAxis)
+			if err != nil {
+				s.Logger.Error("stream writer error on coordinates to cell name", logger.Error(err))
+				return "", errors.Wrap(err, "stream writer coordinates to cell name failed")
+			}
+
+			if err := sw.SetRow(cell, row); err != nil {
+				s.Logger.Error("stream writer error on write", logger.Error(err))
+				return "", errors.Wrap(err, "stream writer write failed")
+			}
+
+			yAxis++
+		}
+	}
+
+	if err := sw.Flush(); err != nil {
+		s.Logger.Error("stream writer error on flush", logger.Error(err))
+		return "", errors.Wrap(err, "stream writer flush failed")
+	}
+
+	fileUuid, err := uuid.NewUUID()
+	if err != nil {
+		s.Logger.Error("failed to generate UUID for file", logger.Error(err))
+		return "", errors.Wrap(err, "uuid generation failed")
+	}
+	tempFileName := fmt.Sprintf("excel-%s.xlsx", fileUuid.String())
+
+	if err := f.SaveAs(tempFileName); err != nil {
+		fmt.Println(err)
+	}
+
+	defer func() {
+		err = os.Remove(tempFileName)
+		if err != nil {
+			s.Logger.Error("failed to remove temporary file", logger.Error(err))
+		}
+	}()
+
+	file, err := os.Open(tempFileName)
+	defer func() {
+		err = file.Close()
+		if err != nil {
+			s.Logger.Error("failed to close temporary file", logger.Error(err))
+		}
+	}()
+
+	fileStat, err := file.Stat()
+	if err != nil {
+		s.Logger.Error("failed to get file info", logger.Error(err))
+		return "", errors.Wrap(err, "file stat failed")
+	}
+
 	// Загружаем в MinIO
-	info, err := s.Client.PutObject(ctx, s.Config.BucketName, s.Config.ObjectName, pr, -1, minio.PutObjectOptions{})
+	info, err := s.Client.PutObject(
+		ctx,
+		s.Config.BucketName,
+		s.Config.ObjectName,
+		file,
+		fileStat.Size(),
+		minio.PutObjectOptions{ContentType: excelContentType},
+	)
 	if err != nil {
 		s.Logger.Error("stream writer error on minio PutObject", logger.Error(err))
 		return "", errors.Wrap(err, "minio put object failed")
 	}
 
 	// Генерируем пресайн URL при необходимости
-	if s.Config.PresignExpire > 0 {
+	if s.Config.PresignExpire > time.Second {
 		s.Logger.Debug("stream writer presign url generate")
 		fUrl, err := s.Client.PresignedGetObject(ctx, s.Config.BucketName, s.Config.ObjectName, s.Config.PresignExpire, nil)
 		if err != nil {
@@ -158,4 +162,148 @@ func (s *XlsxStreamer[T]) StreamToMinio(ctx context.Context, dataCh <-chan T, ro
 	}
 
 	return info.Key, nil
+}
+
+func (s *XlsxStreamer[T]) StreamPipeToMinio(ctx context.Context, dataCh <-chan T, headers []string, rowConverter func(row T) [][]interface{}) (string, error) {
+	var t T
+	typeName := reflect.TypeOf(t)
+	s.Logger.DebugWithCtx(ctx, fmt.Sprintf("%v.StreamPipeToMinio", typeName))
+
+	// Создаем pipe для передачи данных
+	pr, pw := io.Pipe()
+
+	// Запускаем горутину для записи Excel
+	go func() {
+		defer func(pw *io.PipeWriter) {
+			err := pw.Close()
+			if err != nil {
+				s.Logger.Warn("stream writer. pipe writer close error", logger.Error(err))
+			}
+		}(pw)
+
+		f := excelize.NewFile()
+		defer func(f *excelize.File) {
+			err := f.Close()
+			if err != nil {
+				s.Logger.Error("stream writer. excel file close error", logger.Error(err))
+			}
+		}(f)
+
+		sw, err := f.NewStreamWriter("Sheet1")
+		if err != nil {
+			_ = pw.CloseWithError(errors.Wrap(err, "failed to create stream writer"))
+			return
+		}
+
+		// Записываем заголовки
+		headerCells := make([]interface{}, len(headers))
+		for i, header := range headers {
+			headerCells[i] = excelize.Cell{Value: header}
+		}
+
+		if err := sw.SetRow("A1", headerCells); err != nil {
+			_ = pw.CloseWithError(errors.Wrap(err, "stream writer headers set row failed"))
+			return
+		}
+
+		yAxis := 2
+		rowsCount := 0
+
+		// Читаем данные из канала
+		for data := range dataCh {
+			select {
+			case <-ctx.Done():
+				_ = pw.CloseWithError(ctx.Err())
+				return
+			default:
+				// Продолжаем обработку
+			}
+
+			rows := rowConverter(data)
+			if len(rows) == 0 {
+				continue
+			}
+
+			for _, row := range rows {
+				rowToCells(row)
+				cell, err := excelize.CoordinatesToCellName(1, yAxis)
+				if err != nil {
+					_ = pw.CloseWithError(errors.Wrap(err, "stream writer coordinates to cell name failed"))
+					return
+				}
+
+				if err := sw.SetRow(cell, row); err != nil {
+					_ = pw.CloseWithError(errors.Wrap(err, "stream writer write failed"))
+					return
+				}
+
+				yAxis++
+				rowsCount++
+			}
+
+			// Только для логирования прогресса
+			if rowsCount > 0 && rowsCount%1000 == 0 {
+				s.Logger.Debug(fmt.Sprintf("Processed %d rows", rowsCount))
+			}
+		}
+
+		if err := sw.Flush(); err != nil {
+			_ = pw.CloseWithError(errors.Wrap(err, "stream writer flush failed"))
+			return
+		}
+
+		if err := f.Write(pw); err != nil {
+			_ = pw.CloseWithError(errors.Wrap(err, "failed to write excel file to pipe"))
+			return
+		}
+	}()
+
+	// Загружаем данные из pipe в MinIO
+	info, err := s.Client.PutObject(
+		ctx,
+		s.Config.BucketName,
+		s.Config.ObjectName,
+		pr,
+		-1, // Размер неизвестен из-за потоковой передачи
+		minio.PutObjectOptions{ContentType: excelContentType},
+	)
+
+	// Проверяем ошибку загрузки
+	if err != nil {
+		s.Logger.Error("stream writer error on minio PutObject", logger.Error(err))
+		return "", errors.Wrap(err, "minio put object failed")
+	}
+
+	// Генерируем пресайн URL при необходимости
+	if s.Config.PresignExpire > time.Second {
+		s.Logger.Debug("stream writer presign url generate")
+		fUrl, err := s.Client.PresignedGetObject(ctx, s.Config.BucketName, s.Config.ObjectName, s.Config.PresignExpire, nil)
+		if err != nil {
+			s.Logger.Error("stream writer presign url generation failed", logger.Error(err))
+			return "", errors.Wrap(err, "minio url presign failed")
+		}
+		return fUrl.String(), nil
+	}
+
+	return info.Key, nil
+}
+
+func rowToCells(row []interface{}) {
+	for i, val := range row {
+		switch v := val.(type) {
+		case string, int, int64, float64, bool, nil:
+			row[i] = excelize.Cell{Value: v}
+		case time.Time:
+			// Для дат можно использовать специальный формат
+			row[i] = excelize.Cell{
+				Value:   v.Format("2006-01-02"),
+				StyleID: 0, // ID стиля для даты
+			}
+		default:
+			// Для всех остальных типов используем строковое представление
+			row[i] = excelize.Cell{Value: fmt.Sprintf("%v", v)}
+		}
+	}
+
+	return
 }
