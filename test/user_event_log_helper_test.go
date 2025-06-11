@@ -10,19 +10,19 @@ import (
 
 func TestToStringMap(t *testing.T) {
 	t.Run("Empty Slice", func(t *testing.T) {
-		values := []interface{}{}
+		values := []any{}
 		result := usereventlog.ToStringMap(values)
 		assert.Empty(t, result)
 	})
 
 	t.Run("String Values", func(t *testing.T) {
-		values := []interface{}{"test1", "test2", "test3"}
+		values := []any{"test1", "test2", "test3"}
 		result := usereventlog.ToStringMap(values)
 		assert.Equal(t, []string{"test1", "test2", "test3"}, result)
 	})
 
 	t.Run("Mixed Values", func(t *testing.T) {
-		values := []interface{}{123, "test", true, 45.67}
+		values := []any{123, "test", true, 45.67}
 		result := usereventlog.ToStringMap(values)
 		assert.Equal(t, []string{"123", "test", "true", "45.67"}, result)
 	})

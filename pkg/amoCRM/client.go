@@ -19,36 +19,38 @@ type Client interface {
 var _ Client = (*amoCRM)(nil)
 
 type amoCRM struct {
-	api *api
+	api    *api
+	logger logger.Logger
 }
 
 // New allocates and returns a new amoCRM API Client.
-func New(clientID, clientSecret, redirectURL string) Client {
+func New(clientID, clientSecret, redirectURL string, logger logger.Logger) Client {
 	return &amoCRM{
-		api: newAPI(clientID, clientSecret, redirectURL),
+		api:    newAPI(clientID, clientSecret, redirectURL, logger),
+		logger: logger,
 	}
 }
 
 // SetToken stores given token to sign API requests.
 func (a *amoCRM) SetToken(ctx context.Context, token Token) error {
 	if token == nil {
-		logger.Log.DebugWithCtx(ctx, "Setting token", logger.String("token_type", "nil"))
+		a.logger.DebugWithCtx(ctx, "Setting token", logger.String("token_type", "nil"))
 	} else {
-		logger.Log.DebugWithCtx(ctx, "Setting token", logger.String("token_type", token.TokenType()))
+		a.logger.DebugWithCtx(ctx, "Setting token", logger.String("token_type", token.TokenType()))
 	}
 	return a.api.setToken(ctx, token)
 }
 
 // SetDomain stores given domain to build accounts-specific API endpoints.
 func (a *amoCRM) SetDomain(ctx context.Context, domain string) error {
-	logger.Log.DebugWithCtx(ctx, "Setting domain", logger.String("domain", domain))
+	a.logger.DebugWithCtx(ctx, "Setting domain", logger.String("domain", domain))
 	return a.api.setDomain(ctx, domain)
 }
 
 // TokenByCode makes a handshake with amoCRM, exchanging given
 // authorization code for a set of tokens.
 func (a *amoCRM) TokenByCode(ctx context.Context, code string) (Token, error) {
-	logger.Log.DebugWithCtx(ctx, "Getting token by code")
+	a.logger.DebugWithCtx(ctx, "Getting token by code")
 	return a.api.getToken(ctx, authorizationCodeGrant, url.Values{
 		"code":       []string{code},
 		"grant_type": []string{"authorization_code"},
@@ -56,5 +58,5 @@ func (a *amoCRM) TokenByCode(ctx context.Context, code string) (Token, error) {
 }
 
 func (a *amoCRM) Leads() Leads {
-	return NewLead(a.api, logger.Log)
+	return NewLead(a.api, a.logger)
 }

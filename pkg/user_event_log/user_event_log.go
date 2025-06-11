@@ -2,6 +2,8 @@ package usereventlog
 
 import (
 	"context"
+
+	"github.com/billz-2/packages/pkg/logger"
 )
 
 //var userLog userEventLogWriter
@@ -10,12 +12,13 @@ type UserEventLog interface {
 	PushUserLog(
 		ctx context.Context,
 		template EventLogReq,
-		getData func([]interface{}) map[string]map[string]interface{},
-	)
+		getData func([]any) (data map[string]map[string]any, err error),
+	) error
 }
 
-func NewUserEventLogHandler(kafka Kafka) UserEventLog {
+func NewUserEventLogHandler(kafka Kafka, logger logger.Logger) UserEventLog {
 	return &userEventLogService{
-		kafka: kafka,
+		kafka:  kafka,
+		logger: logger,
 	}
 }

@@ -70,15 +70,24 @@ func (t tokenSource) ExpiresAt() time.Time {
 	return t.expiresAt
 }
 
+const (
+	bearerTokenType         = "bearer"
+	macTokenType            = "mac"
+	basicTokenType          = "basic"
+	defaultTokenType        = "Bearer"
+	macTokenTypeFormatted   = "MAC"
+	basicTokenTypeFormatted = "Basic"
+)
+
 // TokenType returns token type or "Bearer" by default.
 func (t tokenSource) TokenType() string {
 	switch {
-	case strings.EqualFold(t.tokenType, "bearer"), t.tokenType == "":
-		return "Bearer"
-	case strings.EqualFold(t.tokenType, "mac"):
-		return "MAC"
-	case strings.EqualFold(t.tokenType, "basic"):
-		return "Basic"
+	case strings.EqualFold(t.tokenType, bearerTokenType), t.tokenType == "":
+		return defaultTokenType
+	case strings.EqualFold(t.tokenType, macTokenType):
+		return macTokenTypeFormatted
+	case strings.EqualFold(t.tokenType, basicTokenType):
+		return basicTokenTypeFormatted
 	default:
 		return t.tokenType
 	}

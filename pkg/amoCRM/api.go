@@ -49,7 +49,7 @@ type api struct {
 	logger logger.Logger
 }
 
-func newAPI(clientID, clientSecret, redirectURL string) *api {
+func newAPI(clientID, clientSecret, redirectURL string, logger logger.Logger) *api {
 	return &api{
 		clientID:     clientID,
 		clientSecret: clientSecret,
@@ -57,24 +57,17 @@ func newAPI(clientID, clientSecret, redirectURL string) *api {
 		http: &http.Client{
 			Timeout: requestTimeout,
 		},
-		logger: logger.Log,
+		logger: logger,
 	}
 }
 
 func (a *api) get(ctx context.Context, ep endpoint, q url.Values, h http.Header) (*http.Response, error) {
-	logger.Log.DebugWithCtx(ctx, "Making GET request", logger.String("endpoint", string(ep)))
+	a.logger.DebugWithCtx(ctx, "Making GET request", logger.String("endpoint", string(ep)))
 
-	if a.token == nil {
-		logger.Log.ErrorWithCtx(ctx, "Invalid token", logger.String("endpoint", string(ep)))
-		return nil, errors.New("invalid token")
-	}
-
-	if a.token.Expired() {
-		logger.Log.DebugWithCtx(ctx, "Token expired, refreshing", logger.String("endpoint", string(ep)))
-		if err := a.refreshToken(ctx); err != nil {
-			logger.Log.ErrorWithCtx(ctx, "Failed to refresh token", logger.String("endpoint", string(ep)), logger.Error(err))
-			return nil, err
-		}
+	err := a.checkToken(ctx)
+	if err != nil {
+		a.logger.ErrorWithCtx(ctx, "Failed to check token", logger.String("endpoint", string(ep)), logger.Error(err))
+		return nil, err
 	}
 
 	header := a.header()
@@ -86,40 +79,33 @@ func (a *api) get(ctx context.Context, ep endpoint, q url.Values, h http.Header)
 
 	apiURL, err := a.url(ep.path(), q)
 	if err != nil {
-		logger.Log.ErrorWithCtx(ctx, "Failed to build URL", logger.String("endpoint", string(ep)), logger.Error(err))
+		a.logger.ErrorWithCtx(ctx, "Failed to build URL", logger.String("endpoint", string(ep)), logger.Error(err))
 		return nil, err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL.String(), nil)
 	if err != nil {
-		logger.Log.ErrorWithCtx(ctx, "Failed to create request", logger.String("endpoint", string(ep)), logger.Error(err))
+		a.logger.ErrorWithCtx(ctx, "Failed to create request", logger.String("endpoint", string(ep)), logger.Error(err))
 		return nil, err
 	}
 	req.Header = header
 
 	resp, err := a.http.Do(req)
 	if err != nil {
-		logger.Log.ErrorWithCtx(ctx, "Request failed", logger.String("endpoint", string(ep)), logger.Error(err))
+		a.logger.ErrorWithCtx(ctx, "Request failed", logger.String("endpoint", string(ep)), logger.Error(err))
 	} else {
-		logger.Log.DebugWithCtx(ctx, "Request successful", logger.String("endpoint", string(ep)), logger.Int("status", resp.StatusCode))
+		a.logger.DebugWithCtx(ctx, "Request successful", logger.String("endpoint", string(ep)), logger.Int("status", resp.StatusCode))
 	}
 	return resp, err
 }
 
 func (a *api) patch(ctx context.Context, ep endpoint, q url.Values, h http.Header, body io.Reader) (*http.Response, error) {
-	logger.Log.DebugWithCtx(ctx, "Making PATCH request", logger.String("endpoint", string(ep)))
+	a.logger.DebugWithCtx(ctx, "Making PATCH request", logger.String("endpoint", string(ep)))
 
-	if a.token == nil {
-		logger.Log.ErrorWithCtx(ctx, "Invalid token", logger.String("endpoint", string(ep)))
-		return nil, errors.New("invalid token")
-	}
-
-	if a.token.Expired() {
-		logger.Log.DebugWithCtx(ctx, "Token expired, refreshing", logger.String("endpoint", string(ep)))
-		if err := a.refreshToken(ctx); err != nil {
-			logger.Log.ErrorWithCtx(ctx, "Failed to refresh token", logger.String("endpoint", string(ep)), logger.Error(err))
-			return nil, err
-		}
+	err := a.checkToken(ctx)
+	if err != nil {
+		a.logger.ErrorWithCtx(ctx, "Failed to check token", logger.String("endpoint", string(ep)), logger.Error(err))
+		return nil, err
 	}
 
 	header := a.header()
@@ -135,42 +121,42 @@ func (a *api) patch(ctx context.Context, ep endpoint, q url.Values, h http.Heade
 
 	apiURL, err := a.url(ep.path(), q)
 	if err != nil {
-		logger.Log.ErrorWithCtx(ctx, "Failed to build URL", logger.String("endpoint", string(ep)), logger.Error(err))
+		a.logger.ErrorWithCtx(ctx, "Failed to build URL", logger.String("endpoint", string(ep)), logger.Error(err))
 		return nil, err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, apiURL.String(), io.NopCloser(body))
 	if err != nil {
-		logger.Log.ErrorWithCtx(ctx, "Failed to create request", logger.String("endpoint", string(ep)), logger.Error(err))
+		a.logger.ErrorWithCtx(ctx, "Failed to create request", logger.String("endpoint", string(ep)), logger.Error(err))
 		return nil, err
 	}
 	req.Header = header
 
 	resp, err := a.http.Do(req)
 	if err != nil {
-		logger.Log.ErrorWithCtx(ctx, "Request failed", logger.String("endpoint", string(ep)), logger.Error(err))
+		a.logger.ErrorWithCtx(ctx, "Request failed", logger.String("endpoint", string(ep)), logger.Error(err))
 	} else {
-		logger.Log.DebugWithCtx(ctx, "Request successful", logger.String("endpoint", string(ep)), logger.Int("status", resp.StatusCode))
+		a.logger.DebugWithCtx(ctx, "Request successful", logger.String("endpoint", string(ep)), logger.Int("status", resp.StatusCode))
 	}
 	return resp, err
 }
 
 func (a *api) setToken(ctx context.Context, token Token) error {
 	if token == nil {
-		logger.Log.ErrorWithCtx(ctx, "Invalid token")
+		a.logger.ErrorWithCtx(ctx, "Invalid token")
 		return errors.New("invalid token")
 	}
-	
-	logger.Log.DebugWithCtx(ctx, "Setting token", logger.String("token_type", token.TokenType()))
+
+	a.logger.DebugWithCtx(ctx, "Setting token", logger.String("token_type", token.TokenType()))
 	a.token = token
 	return nil
 }
 
 func (a *api) setDomain(ctx context.Context, domain string) error {
-	logger.Log.DebugWithCtx(ctx, "Setting domain", logger.String("domain", domain))
+	a.logger.DebugWithCtx(ctx, "Setting domain", logger.String("domain", domain))
 
 	if !isValidDomain(domain) {
-		logger.Log.ErrorWithCtx(ctx, "Invalid domain", logger.String("domain", domain))
+		a.logger.ErrorWithCtx(ctx, "Invalid domain", logger.String("domain", domain))
 		return errors.New("invalid domain")
 	}
 
@@ -179,20 +165,20 @@ func (a *api) setDomain(ctx context.Context, domain string) error {
 }
 
 func (a *api) getToken(ctx context.Context, grant GrantType, options url.Values, header http.Header) (Token, error) {
-	logger.Log.DebugWithCtx(ctx, "Getting token", logger.String("grant_type", grant.code))
+	a.logger.DebugWithCtx(ctx, "Getting token", logger.String("grant_type", grant.code))
 
 	if !isValidDomain(a.domain) {
-		logger.Log.ErrorWithCtx(ctx, "Invalid accounts domain", logger.String("domain", a.domain))
-		return nil, oauth2Err("invalid accounts domain")
+		a.logger.ErrorWithCtx(ctx, "Invalid accounts domain", logger.String("domain", a.domain))
+		return nil, amoCrmApiErrWrap("invalid accounts domain")
 	}
 
 	// Validate required grantType-specific fields
 	for _, key := range grant.fields {
 		if values, ok := options[key]; len(values) == 0 || !ok {
-			logger.Log.ErrorWithCtx(ctx, "Missing required grant parameter",
+			a.logger.ErrorWithCtx(ctx, "Missing required grant parameter",
 				logger.String("grant_type", grant.code),
 				logger.String("parameter", key))
-			return nil, oauth2Err("missing required %s grant parameter %s", grant.code, key)
+			return nil, amoCrmApiErrWrap("missing required %s grant parameter %s", grant.code, key)
 		}
 	}
 
@@ -214,8 +200,8 @@ func (a *api) getToken(ctx context.Context, grant GrantType, options url.Values,
 	// Set request URL
 	tokenURL, err := a.url("/oauth2/access_token", nil)
 	if err != nil {
-		logger.Log.ErrorWithCtx(ctx, "Failed to build request URL", logger.Error(err))
-		return nil, oauth2Err("build request url")
+		a.logger.ErrorWithCtx(ctx, "Failed to build request URL", logger.Error(err))
+		return nil, amoCrmApiErrWrap("build request url")
 	}
 
 	// Set request headers
@@ -233,39 +219,39 @@ func (a *api) getToken(ctx context.Context, grant GrantType, options url.Values,
 	// Build request
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL.String(), reqBody)
 	if err != nil {
-		logger.Log.ErrorWithCtx(ctx, "Failed to create request", logger.Error(err))
-		return nil, oauth2Err("create request")
+		a.logger.ErrorWithCtx(ctx, "Failed to create request", logger.Error(err))
+		return nil, amoCrmApiErrWrap("create request")
 	}
 	req.Header = reqHeader
 
-	logger.Log.DebugWithCtx(ctx, "Sending token request", logger.String("url", tokenURL.String()))
+	a.logger.DebugWithCtx(ctx, "Sending token request", logger.String("url", tokenURL.String()))
 	resp, err := a.http.Do(req)
 	if err != nil {
-		logger.Log.ErrorWithCtx(ctx, "Failed to send request", logger.Error(err))
-		return nil, oauth2Err("send request")
+		a.logger.ErrorWithCtx(ctx, "Failed to send request", logger.Error(err))
+		return nil, amoCrmApiErrWrap("send request")
 	}
 
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if closeBodyErr := resp.Body.Close(); closeBodyErr != nil {
-		logger.Log.ErrorWithCtx(ctx, "Failed to close response body", logger.Error(closeBodyErr))
-		return nil, oauth2Err("close response body")
+		a.logger.ErrorWithCtx(ctx, "Failed to close response body", logger.Error(closeBodyErr))
+		return nil, amoCrmApiErrWrap("close response body")
 	}
 	if err != nil {
-		logger.Log.ErrorWithCtx(ctx, "Failed to read response body", logger.Error(err))
-		return nil, oauth2Err("fetch response body")
+		a.logger.ErrorWithCtx(ctx, "Failed to read response body", logger.Error(err))
+		return nil, amoCrmApiErrWrap("fetch response body")
 	}
 
 	if statusCode := resp.StatusCode; statusCode < 200 || statusCode > 299 {
-		logger.Log.ErrorWithCtx(ctx, "Unexpected status code",
+		a.logger.ErrorWithCtx(ctx, "Unexpected status code",
 			logger.Int("status_code", statusCode),
 			logger.String("response", string(respBody)))
-		return nil, oauth2Err("fetch token: response: %v - %s, request: %+v", resp.Status, respBody, req)
+		return nil, amoCrmApiErrWrap("fetch token: response: %v - %s, request: %+v", resp.Status, respBody, req)
 	}
 
 	var jsonToken tokenJSON
 	if err = json.Unmarshal(respBody, &jsonToken); err != nil {
-		logger.Log.ErrorWithCtx(ctx, "Failed to parse token from JSON", logger.Error(err))
-		return nil, oauth2Err("parse token from json")
+		a.logger.ErrorWithCtx(ctx, "Failed to parse token from JSON", logger.Error(err))
+		return nil, amoCrmApiErrWrap("parse token from json")
 	}
 
 	token := &tokenSource{
@@ -276,20 +262,20 @@ func (a *api) getToken(ctx context.Context, grant GrantType, options url.Values,
 	}
 
 	if token.accessToken == "" {
-		logger.Log.ErrorWithCtx(ctx, "Server response missing access_token")
-		return nil, oauth2Err("server response missing access_token")
+		a.logger.ErrorWithCtx(ctx, "Server response missing access_token")
+		return nil, amoCrmApiErrWrap("server response missing access_token")
 	}
 
-	logger.Log.DebugWithCtx(ctx, "Token obtained successfully")
+	a.logger.DebugWithCtx(ctx, "Token obtained successfully")
 	return token, nil
 }
 
 func (a *api) refreshToken(ctx context.Context) error {
-	logger.Log.DebugWithCtx(ctx, "Refreshing token")
+	a.logger.DebugWithCtx(ctx, "Refreshing token")
 
 	if a.token.RefreshToken() == "" {
-		logger.Log.ErrorWithCtx(ctx, "Empty refresh token")
-		return oauth2Err("empty refresh token")
+		a.logger.ErrorWithCtx(ctx, "Empty refresh token")
+		return amoCrmApiErrWrap("empty refresh token")
 	}
 
 	token, err := a.getToken(ctx, refreshTokenGrant, url.Values{
@@ -297,18 +283,18 @@ func (a *api) refreshToken(ctx context.Context) error {
 		"refresh_token": []string{a.token.RefreshToken()},
 	}, nil)
 	if err != nil {
-		logger.Log.ErrorWithCtx(ctx, "Failed to refresh token", logger.Error(err))
+		a.logger.ErrorWithCtx(ctx, "Failed to refresh token", logger.Error(err))
 		return err
 	}
 
-	logger.Log.DebugWithCtx(ctx, "Token refreshed successfully")
+	a.logger.DebugWithCtx(ctx, "Token refreshed successfully")
 	a.token = token
 	return nil
 }
 
 func (a *api) url(path string, q url.Values) (*url.URL, error) {
 	if !isValidDomain(a.domain) {
-		return nil, oauth2Err("invalid accounts domain")
+		return nil, amoCrmApiErrWrap("invalid accounts domain")
 	}
 
 	endpointURL := "https://" + a.domain + path + "?" + q.Encode()
@@ -349,6 +335,25 @@ func isValidDomain(domain string) bool {
 	return true
 }
 
-func oauth2Err(format string, args ...interface{}) error {
-	return fmt.Errorf("oauth2: "+format, args...)
+func amoCrmApiErrWrap(format string, args ...any) error {
+	return fmt.Errorf("amoCRM api client error: "+format, args...)
+}
+
+func (a *api) checkToken(ctx context.Context) error {
+	a.logger.DebugWithCtx(ctx, "Checking token")
+
+	if a.token == nil {
+		a.logger.ErrorWithCtx(ctx, "Invalid token")
+		return errors.New("invalid token")
+	}
+
+	if a.token.Expired() {
+		a.logger.DebugWithCtx(ctx, "Token expired, refreshing")
+		if err := a.refreshToken(ctx); err != nil {
+			a.logger.ErrorWithCtx(ctx, "Failed to refresh token", logger.Error(err))
+			return err
+		}
+	}
+
+	return nil
 }

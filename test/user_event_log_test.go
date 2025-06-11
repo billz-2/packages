@@ -2,11 +2,14 @@ package test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
+	"github.com/billz-2/packages/pkg/logger"
 	usereventlog "github.com/billz-2/packages/pkg/user_event_log"
 	mock_usereventlog "github.com/billz-2/packages/pkg/user_event_log/mock"
 	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestUserEventLog_PushUserLog(t *testing.T) {
@@ -14,7 +17,8 @@ func TestUserEventLog_PushUserLog(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockKafka := mock_usereventlog.NewMockKafka(ctrl)
-	userEventLog := usereventlog.NewUserEventLogHandler(mockKafka)
+	logger := logger.New("debug", "test")
+	userEventLog := usereventlog.NewUserEventLogHandler(mockKafka, logger)
 
 	// Test case: empty IDs slice
 	t.Run("Empty IDs", func(t *testing.T) {
@@ -34,8 +38,8 @@ func TestUserEventLog_PushUserLog(t *testing.T) {
 			IDs:              []string{},
 		}
 
-		getData := func(ids []interface{}) map[string]map[string]interface{} {
-			return map[string]map[string]interface{}{}
+		getData := func(ids []any) (map[string]map[string]any, error) {
+			return map[string]map[string]any{}, nil
 		}
 
 		// This should not panic and should not call kafka.Push
@@ -58,13 +62,13 @@ func TestUserEventLog_PushUserLog(t *testing.T) {
 			IDs:              []string{"id1", "id2"},
 		}
 
-		getData := func(ids []interface{}) map[string]map[string]interface{} {
-			return map[string]map[string]interface{}{
+		getData := func(ids []any) (map[string]map[string]any, error) {
+			return map[string]map[string]any{
 				"parent1": {
-					"id1": map[string]interface{}{"name": "Test 1"},
-					"id2": map[string]interface{}{"name": "Test 2"},
+					"id1": map[string]any{"name": "Test 1"},
+					"id2": map[string]any{"name": "Test 2"},
 				},
-			}
+			}, nil
 		}
 
 		// Expect kafka.Push to be called once with the right topic and company ID
@@ -97,16 +101,16 @@ func TestUserEventLog_PushUserLog(t *testing.T) {
 			IDs:              ids,
 		}
 
-		getData := func(ids []interface{}) map[string]map[string]interface{} {
-			data := map[string]map[string]interface{}{
+		getData := func(ids []any) (map[string]map[string]any, error) {
+			data := map[string]map[string]any{
 				"parent1": {},
 			}
 
 			for _, id := range ids {
-				data["parent1"][id.(string)] = map[string]interface{}{"name": "Test " + id.(string)}
+				data["parent1"][id.(string)] = map[string]any{"name": "Test " + id.(string)}
 			}
 
-			return data
+			return data, nil
 		}
 
 		// Expect kafka.Push to be called twice (once for each batch)
@@ -134,12 +138,39 @@ func TestUserEventLog_PushUserLog(t *testing.T) {
 			IDs:              []string{"id1", "id2"},
 		}
 
-		getData := func(ids []interface{}) map[string]map[string]interface{} {
-			return map[string]map[string]interface{}{}
+		getData := func(ids []any) (map[string]map[string]any, error) {
+			return map[string]map[string]any{}, nil
 		}
 
 		// No expectations for mockKafka as no events should be pushed
 
 		userEventLog.PushUserLog(context.Background(), template, getData)
+	})
+
+	// Test case: getData returns error
+	t.Run("GetData Error", func(t *testing.T) {
+		template := usereventlog.EventLogReq{
+			CompanyID:        "company1",
+			UserID:           "user1",
+			SessionID:        "session1",
+			EventID:          "event1",
+			EventActionType:  "create",
+			EventSource:      "test",
+			ParentObjectName: "parent",
+			ParentObjectID:   "parent1",
+			ObjectID:         "object1",
+			ObjectType:       "test_object",
+			IDs:              []string{"id1", "id2"},
+		}
+
+		getData := func(ids []any) (map[string]map[string]any, error) {
+			return nil, errors.New("data retrieval failed")
+		}
+
+		// No expectations for mockKafka as function should return early on error
+
+		err := userEventLog.PushUserLog(context.Background(), template, getData)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "data retrieval failed")
 	})
 }

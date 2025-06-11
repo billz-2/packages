@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/billz-2/packages/pkg/logger"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,12 +17,14 @@ var (
 )
 
 func TestNew(t *testing.T) {
-	cl := amocrm.New(clientID, clientSecret, redirectURL)
+	testLogger := logger.New(logger.LevelDebug, "test")
+	cl := amocrm.New(clientID, clientSecret, redirectURL, testLogger)
 	require.Implements(t, (*amocrm.Client)(nil), cl)
 }
 
 func TestAmoCRM_SetToken(t *testing.T) {
-	cl := amocrm.New(clientID, clientSecret, redirectURL)
+	testLogger := logger.New(logger.LevelDebug, "test")
+	cl := amocrm.New(clientID, clientSecret, redirectURL, testLogger)
 	require.EqualError(t, cl.SetToken(ctx, nil), "invalid token")
 
 	token := amocrm.NewToken(accessToken, refreshToken, tokenType, time.Now())
@@ -48,7 +51,8 @@ func TestAmoCRM_SetDomain(t *testing.T) {
 		{domain: "any.amocrm.com", isValid: true},
 	}
 
-	cl := amocrm.New(clientID, clientSecret, redirectURL)
+	testLogger := logger.New(logger.LevelDebug, "test")
+	cl := amocrm.New(clientID, clientSecret, redirectURL, testLogger)
 
 	for _, tc := range cases {
 		if tc.isValid {

@@ -18,14 +18,16 @@ func init() {
 
 func TestNewAPI(t *testing.T) {
 	// This test indirectly tests newAPI through the New function in client.go
-	cl := amocrm.New(clientID, clientSecret, redirectURL)
+	testLogger := logger.New(logger.LevelDebug, "test")
+	cl := amocrm.New(clientID, clientSecret, redirectURL, testLogger)
 	require.NotNil(t, cl)
 	require.Implements(t, (*amocrm.Client)(nil), cl)
 }
 
 func TestIsValidDomain(t *testing.T) {
 	// Test isValidDomain through SetDomain
-	cl := amocrm.New(clientID, clientSecret, redirectURL)
+	testLogger := logger.New(logger.LevelDebug, "test")
+	cl := amocrm.New(clientID, clientSecret, redirectURL, testLogger)
 
 	// Valid domains
 	require.NoError(t, cl.SetDomain(ctx, "test.amocrm.ru"))
@@ -42,7 +44,8 @@ func TestIsValidDomain(t *testing.T) {
 
 func TestOAuth2Err(t *testing.T) {
 	// Test oauth2Err through getToken
-	cl := amocrm.New(clientID, clientSecret, redirectURL)
+	testLogger := logger.New(logger.LevelDebug, "test")
+	cl := amocrm.New(clientID, clientSecret, redirectURL, testLogger)
 
 	// Set a valid domain first
 	require.NoError(t, cl.SetDomain(ctx, "test.amocrm.ru"))
@@ -50,12 +53,13 @@ func TestOAuth2Err(t *testing.T) {
 	// Test with an invalid grant type
 	_, err := cl.TokenByCode(ctx, "")
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "oauth2: fetch token")
+	require.Contains(t, err.Error(), "amoCRM api client error: fetch token")
 }
 
 func TestURL(t *testing.T) {
 	// Test url through the Client interface
-	cl := amocrm.New(clientID, clientSecret, redirectURL)
+	testLogger := logger.New(logger.LevelDebug, "test")
+	cl := amocrm.New(clientID, clientSecret, redirectURL, testLogger)
 
 	// Set a valid domain first
 	require.NoError(t, cl.SetDomain(ctx, "test.amocrm.ru"))
@@ -64,12 +68,13 @@ func TestURL(t *testing.T) {
 	// when the domain is valid but the code is missing
 	_, err := cl.TokenByCode(ctx, "")
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "oauth2: fetch token")
+	require.Contains(t, err.Error(), "amoCRM api client error: fetch token")
 }
 
 func TestHeader(t *testing.T) {
 	// Test header through the Client interface
-	cl := amocrm.New(clientID, clientSecret, redirectURL)
+	testLogger := logger.New(logger.LevelDebug, "test")
+	cl := amocrm.New(clientID, clientSecret, redirectURL, testLogger)
 
 	// Set a valid domain and token
 	require.NoError(t, cl.SetDomain(ctx, "test.amocrm.ru"))
@@ -83,7 +88,8 @@ func TestHeader(t *testing.T) {
 
 func TestBaseHeader(t *testing.T) {
 	// Test baseHeader through the Client interface
-	cl := amocrm.New(clientID, clientSecret, redirectURL)
+	testLogger := logger.New(logger.LevelDebug, "test")
+	cl := amocrm.New(clientID, clientSecret, redirectURL, testLogger)
 
 	// We can't directly test baseHeader, but we can test that New creates a valid client
 	require.NotNil(t, cl)
