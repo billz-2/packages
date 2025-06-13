@@ -1,0 +1,167 @@
+name: '🤖 Gemini Code Review'
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  code-review:
+    # Исключаем PR от renovate[bot]
+    if: github.event.pull_request.user.login != 'renovate[bot]'
+    
+    # Используем стандартный runner, но вы можете указать свой self-hosted,
+    # если в его образе есть git, curl, awk и jq.
+    runs-on: ubuntu-latest
+    
+    # Конфигурационные переменные и локализация
+    env:
+      MAX_DIFF_LINES: 1000 # Лимит на суммарное количество добавленных/удаленных строк
+      COMMENT_HEADER: "### 🤖 Ревью кода от Gemini"
+      LARGE_DIFF_COMMENT: "⚠️ **Pull Request слишком большой для автоматического ревью.**\n\nПожалуйста, разделите его на несколько небольших PR для более эффективной проверки."
+      EMPTY_DIFF_COMMENT: "✅ **В этом PR нет изменений в коде для ревью.**"
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for Secrets and Variables
+        run: |
+          if [ -z "${{ secrets.GEMINI_API_KEY }}" ]; then
+            echo "::error title=Missing Secret::GEMINI_API_KEY secret is not set. Please add it to the repository secrets."
+            exit 1
+          fi
+          if [ -z "${{ vars.GEMINI_CODE_REVIEW_PROMPT }}" ]; then
+            echo "::error title=Missing Variable::Repository variable GEMINI_CODE_REVIEW_PROMPT is not set."
+            exit 1
+          fi
+
+      - name: Get PR Diff and Stat
+        id: get_diff
+        run: |
+          echo "Calculating diff..."
+          git diff --stat ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }}
+          
+          DIFF_CONTENT=$(git diff ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }})
+          echo "diff_content<<EOF" >> $GITHUB_OUTPUT
+          echo "$DIFF_CONTENT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Check for Empty Diff
+        id: check_empty
+        env:
+          DIFF_CONTENT: ${{ steps.get_diff.outputs.diff_content }}
+        run: |
+          if [ -z "$DIFF_CONTENT" ]; then
+            echo "is_empty=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_empty=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Post Comment for Empty Diff
+        if: steps.check_empty.outputs.is_empty == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const body = `${{ env.COMMENT_HEADER }}\n\n${{ env.EMPTY_DIFF_COMMENT }}`;
+            github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: body
+            });
+
+      - name: Check Diff Size by Changed Lines
+        id: check_size
+        if: steps.check_empty.outputs.is_empty == 'false'
+        run: |
+          # Эффективно считаем суммарное количество добавленных и удаленных строк.
+          # git diff --numstat: выводит "добавлено<ТАБ>удалено<ТАБ>файл"
+          # awk '{s+=$1; s+=$2} END {print s}': суммирует первые два столбца для всех строк
+          DIFF_LINES=$(git diff --numstat ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | awk '{s+=$1; s+=$2} END {print s}')
+          
+          if [ -z "$DIFF_LINES" ]; then
+            DIFF_LINES=0
+          fi
+          
+          if [ "$DIFF_LINES" -gt "${{ env.MAX_DIFF_LINES }}" ]; then
+            echo "::warning::Diff size ($DIFF_LINES lines) exceeds the limit of ${{ env.MAX_DIFF_LINES }} lines."
+            echo "is_too_large=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_too_large=false" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Call Gemini API
+        id: gemini_review
+        if: steps.check_empty.outputs.is_empty == 'false' && steps.check_size.outputs.is_too_large == 'false'
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PR_DIFF: ${{ steps.get_diff.outputs.diff_content }}
+          PROMPT_TEMPLATE: ${{ vars.GEMINI_CODE_REVIEW_PROMPT }}
+        run: |
+          set -e
+          
+          FULL_PROMPT=$(printf "$PROMPT_TEMPLATE" "$PR_DIFF")
+
+          JSON_PAYLOAD=$(jq -n --arg prompt "$FULL_PROMPT" '
+          {
+            "contents": [ { "parts": [ { "text": $prompt } ] } ],
+            "generationConfig": { "maxOutputTokens": 4096 }
+          }')
+          
+          # -s: silent, -o: output file, -w: write-out http_code
+          HTTP_RESPONSE=$(curl -s -o response.json -w "%{http_code}" -X POST \
+            -H "Content-Type: application/json" -d "$JSON_PAYLOAD" \
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=$GEMINI_API_KEY")
+
+          if [ "$HTTP_RESPONSE" -ne 200 ]; then
+            ERROR_DETAILS=$(jq -r '"Code: \(.error.code // "N/A"), Message: \(.error.message // "No message"), Status: \(.error.status // "N/A")"' response.json)
+            echo "::error title=Gemini API HTTP Error $HTTP_RESPONSE::${ERROR_DETAILS}"
+            exit 1
+          fi
+
+          API_ERROR=$(jq -r '.error.message // ""' response.json)
+          if [ -n "$API_ERROR" ]; then
+            echo "::error title=Gemini API Functional Error::${API_ERROR}"
+            exit 1
+          fi
+          
+          REVIEW_TEXT=$(jq -r '.candidates[0].content.parts[0].text // ""' response.json)
+          
+          # Надежная проверка, что ответ не состоит только из пробельных символов
+          # '!' инвертирует результат: скрипт падает, если grep НЕ нашел не-пробельный символ.
+          if ! echo "$REVIEW_TEXT" | grep -q '[^[:space:]]'; then
+            FINISH_REASON=$(jq -r '.candidates[0].finishReason // "UNKNOWN"' response.json)
+            echo "::error title=Gemini Response Error::The review text from Gemini is empty. Finish Reason: $FINISH_REASON. This might be due to safety settings."
+            exit 1
+          fi
+          
+          echo "review<<EOF" >> $GITHUB_OUTPUT
+          echo "$REVIEW_TEXT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Post Review Comment
+        if: success() && steps.check_empty.outputs.is_empty == 'false' && steps.check_size.outputs.is_too_large == 'false'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const review = ${{ toJSON(steps.gemini_review.outputs.review) }};
+            const body = `${{ env.COMMENT_HEADER }}\n\n${review}`;
+            github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: body
+            });
+
+      - name: Handle Large Diff
+        if: steps.check_size.outputs.is_too_large == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const body = `${{ env.COMMENT_HEADER }}\n\n${{ env.LARGE_DIFF_COMMENT }}`;
+            github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: body
+            });
