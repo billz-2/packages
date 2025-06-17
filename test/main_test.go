@@ -6,12 +6,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/billz-2/packages/pkg/event/mock_kafka"
+	usereventlog "github.com/billz-2/packages/pkg/user_event_log"
+
 	"github.com/billz-2/packages/pkg/bug_notifier"
 	"github.com/billz-2/packages/pkg/logger"
 	"github.com/billz-2/packages/pkg/tracing"
 )
 
-var ctx context.Context
+var (
+	ctx   context.Context
+	kafka mock_kafka.MockKafkaI
+)
 
 func TestMain(m *testing.M) {
 	ctx = context.Background()
@@ -25,7 +31,7 @@ func TestMain(m *testing.M) {
 	})
 
 	jaegerUrl := "localhost:4317"
-	tp, err := tracing.NewTraceProvider(ctx, &tracing.Config{
+	tp, err := tracing.NewTraceProvider(&tracing.Config{
 		ServiceName: "billz_packages",
 		JaegerUrl:   jaegerUrl,
 	})
@@ -33,6 +39,10 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	defer func() { _ = tp.Shutdown(ctx) }()
+
+	kafka = mock_kafka.NewMockKafka()
+
+	usereventlog.NewUserEventLogHandler(kafka, logger.Log)
 
 	exitCode := m.Run()
 
