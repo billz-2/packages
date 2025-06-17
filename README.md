@@ -140,7 +140,7 @@ func main() {
 8 GC_cycles
 ```
 ## Conclusion
-Though streaming via pipe should be more memory efficient MiniO makes huge memory buffer around 600 MB when does not 
+Though streaming via pipe should be more memory efficient MiniO makes huge memory buffer around 600 MB when does not
 know the file size, and buffer grows wth every write operation that goes out of memory limits. As we can see memory allocation
 differs less than 600 MB. So using temp file is more memory efficient while xlsx does not support proper streaming with
 memory flushes and cursor management.
