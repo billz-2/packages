@@ -3,12 +3,13 @@ package mock_amocrm_test
 import (
 	"context"
 	"testing"
-	"time"
 
 	amocrm "github.com/billz-2/packages/pkg/amoCRM"
 	mock_amocrm "github.com/billz-2/packages/pkg/amoCRM/mock"
 	"go.uber.org/mock/gomock"
 )
+
+const BearerPrefix = "Bearer"
 
 var ctx = context.Background()
 
@@ -59,29 +60,19 @@ func TestUpdateLeadStatus(t *testing.T) {
 	}
 }
 
-// TestCompleteWorkflow demonstrates a more complete workflow with the mock client
-func TestCompleteWorkflow(t *testing.T) {
+// TestSimpleClientWorkflow demonstrates a simple workflow with the mock client
+func TestSimpleClientWorkflow(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	// Create mock instances
 	mockClient := mock_amocrm.NewMockClient(ctrl)
 	mockLeads := mock_amocrm.NewMockLeads(ctrl)
-	mockToken := mock_amocrm.NewMockToken(ctrl)
-
-	// Set up token expectations
-	mockToken.EXPECT().AccessToken().Return("test-access-token").AnyTimes()
-	mockToken.EXPECT().RefreshToken().Return("test-refresh-token").AnyTimes()
-	mockToken.EXPECT().TokenType().Return("Bearer").AnyTimes()
-	mockToken.EXPECT().ExpiresAt().Return(time.Now().Add(1 * time.Hour)).AnyTimes()
-	mockToken.EXPECT().Expired().Return(false).AnyTimes()
 
 	// Set up client expectations
-	mockClient.EXPECT().SetDomain(gomock.Any(), "test.amocrm.ru").Return(nil)
-	mockClient.EXPECT().SetToken(gomock.Any(), mockToken).Return(nil)
 	mockClient.EXPECT().Leads().Return(mockLeads).AnyTimes()
 
-	// Set up leads expectations - using Update since GetByID doesn't exist in the interface
+	// Set up leads expectations
 	leadID := 12345
 	leadUpdate := &amocrm.LeadUpdate{
 		ID:       leadID,
@@ -90,19 +81,38 @@ func TestCompleteWorkflow(t *testing.T) {
 	mockLeads.EXPECT().Update(gomock.Any(), gomock.Any()).Return(nil)
 
 	// Use the mocks
-	err := mockClient.SetDomain(ctx, "test.amocrm.ru")
-	if err != nil {
-		t.Fatalf("Failed to set domain: %v", err)
-	}
-
-	err = mockClient.SetToken(ctx, mockToken)
-	if err != nil {
-		t.Fatalf("Failed to set token: %v", err)
-	}
-
 	leads := mockClient.Leads()
-	err = leads.Update(ctx, leadUpdate)
+	err := leads.Update(ctx, leadUpdate)
 	if err != nil {
 		t.Fatalf("Failed to update lead: %v", err)
+	}
+}
+
+// TestBatchUpdateWorkflow demonstrates batch update with the mock client
+func TestBatchUpdateWorkflow(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	// Create mock instances
+	mockClient := mock_amocrm.NewMockClient(ctrl)
+	mockLeads := mock_amocrm.NewMockLeads(ctrl)
+
+	// Set up client expectations
+	mockClient.EXPECT().Leads().Return(mockLeads)
+
+	// Create test leads
+	leads := []*amocrm.LeadUpdate{
+		{ID: 1, StatusID: &[]int{100}[0]},
+		{ID: 2, StatusID: &[]int{200}[0]},
+	}
+
+	// Set up batch update expectation
+	mockLeads.EXPECT().BatchUpdate(gomock.Any(), gomock.Eq(leads)).Return(nil)
+
+	// Use the mocks
+	leadsClient := mockClient.Leads()
+	err := leadsClient.BatchUpdate(ctx, leads)
+	if err != nil {
+		t.Fatalf("Failed to batch update leads: %v", err)
 	}
 }
