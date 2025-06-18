@@ -42,7 +42,7 @@ func TestMain(m *testing.M) {
 
 	kafka = mock_kafka.NewMockKafka()
 
-	usereventlog.NewUserEventLogHandler(kafka)
+	usereventlog.NewUserEventLogHandler(kafka, logger.Log)
 
 	exitCode := m.Run()
 
