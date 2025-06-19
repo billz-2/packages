@@ -159,6 +159,13 @@ func isValidDomain(domain string) bool {
 		return false
 	}
 
+	// Remove protocol prefix if present
+	domain = strings.TrimPrefix(domain, "http://")
+	domain = strings.TrimPrefix(domain, "https://")
+
+	// Remove trailing slash if present
+	domain = strings.TrimSuffix(domain, "/")
+
 	parts := strings.Split(domain, ".")
 	if len(parts) != 3 ||
 		parts[0] == "" ||
