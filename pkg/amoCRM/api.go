@@ -135,7 +135,7 @@ func (a *api) url(path string, q url.Values) (*url.URL, error) {
 		return nil, amoCrmApiErrWrap("invalid accounts domain")
 	}
 
-	endpointURL := "https://" + a.domain + path + "?" + q.Encode()
+	endpointURL := a.domain + path + "?" + q.Encode()
 
 	return url.Parse(endpointURL)
 }
