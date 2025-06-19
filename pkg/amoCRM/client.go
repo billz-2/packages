@@ -18,9 +18,9 @@ type amoCRM struct {
 }
 
 // New allocates and returns a new amoCRM API Client.
-func New(clientID, clientSecret, token, redirectURL string, logger logger.Logger) Client {
+func New(clientID, clientSecret, token, redirectURL, domain string, logger logger.Logger) Client {
 	return &amoCRM{
-		api:    newAPI(clientID, clientSecret, token, redirectURL, logger),
+		api:    newAPI(clientID, clientSecret, token, redirectURL, domain, logger),
 		logger: logger,
 	}
 }

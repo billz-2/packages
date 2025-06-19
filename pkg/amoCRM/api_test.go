@@ -22,7 +22,7 @@ func init() {
 func TestNewAPI(t *testing.T) {
 	// This test indirectly tests newAPI through the New function in client.go
 	testLogger := logger.New(logger.LevelDebug, "test")
-	cl := amocrm.New(clientID, clientSecret, token, redirectURL, testLogger)
+	cl := amocrm.New(clientID, clientSecret, token, redirectURL, domain, testLogger)
 	require.NotNil(t, cl)
 	require.Implements(t, (*amocrm.Client)(nil), cl)
 }
@@ -30,7 +30,7 @@ func TestNewAPI(t *testing.T) {
 func TestClientCreation(t *testing.T) {
 	// Test client creation with valid parameters
 	testLogger := logger.New(logger.LevelDebug, "test")
-	cl := amocrm.New(clientID, clientSecret, token, redirectURL, testLogger)
+	cl := amocrm.New(clientID, clientSecret, token, redirectURL, domain, testLogger)
 	require.NotNil(t, cl)
 
 	// Verify client has Leads method
@@ -41,7 +41,7 @@ func TestClientCreation(t *testing.T) {
 func TestClientWithEmptyParameters(t *testing.T) {
 	// Test client creation with empty parameters
 	testLogger := logger.New(logger.LevelDebug, "test")
-	cl := amocrm.New("", "", "", "", testLogger)
+	cl := amocrm.New("", "", "", "", "", testLogger)
 	require.NotNil(t, cl)
 	require.Implements(t, (*amocrm.Client)(nil), cl)
 }
@@ -49,7 +49,7 @@ func TestClientWithEmptyParameters(t *testing.T) {
 func TestClientInterface(t *testing.T) {
 	// Test that client implements the Client interface correctly
 	testLogger := logger.New(logger.LevelDebug, "test")
-	cl := amocrm.New(clientID, clientSecret, token, redirectURL, testLogger)
+	cl := amocrm.New(clientID, clientSecret, token, redirectURL, domain, testLogger)
 
 	// Verify interface compliance
 	require.Implements(t, (*amocrm.Client)(nil), cl)

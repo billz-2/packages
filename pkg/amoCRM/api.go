@@ -48,7 +48,7 @@ type api struct {
 	logger logger.Logger
 }
 
-func newAPI(clientID, clientSecret, token, redirectURL string, logger logger.Logger) *api {
+func newAPI(clientID, clientSecret, token, redirectURL, domain string, logger logger.Logger) *api {
 	return &api{
 		clientID:     clientID,
 		clientSecret: clientSecret,
@@ -58,6 +58,7 @@ func newAPI(clientID, clientSecret, token, redirectURL string, logger logger.Log
 		},
 		logger: logger,
 		token:  token,
+		domain: domain,
 	}
 }
 
