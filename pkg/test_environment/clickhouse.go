@@ -17,15 +17,14 @@ import (
 
 // ClickhouseContainer представляет собой контейнер с Clickhouse для тестирования
 type ClickhouseContainer struct {
-	container  testcontainers.Container
-	zooKeeper  testcontainers.Container
-	Connection *sql.DB
-	TCPPort    nat.Port
-	HTTPPort   nat.Port
-	Host       string
-	Username   string
-	Password   string
-	Database   string
+	container testcontainers.Container
+	zooKeeper testcontainers.Container
+	TCPPort   nat.Port
+	HTTPPort  nat.Port
+	Host      string
+	Username  string
+	Password  string
+	Database  string
 }
 
 const internalTCPClickhousePort = 9000
@@ -60,7 +59,7 @@ func SetupClickhouse(ctx context.Context, cfg Config) (*ClickhouseContainer, err
 
 	ipaddr, err := zooKeeperContainer.ContainerIP(ctx)
 
-	cfgFile, err := createConfig()
+	cfgFile, err := createClickHouse01Config()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create Clickhouse config file")
 	}
@@ -158,15 +157,14 @@ func SetupClickhouse(ctx context.Context, cfg Config) (*ClickhouseContainer, err
 	}
 
 	return &ClickhouseContainer{
-		container:  container,
-		zooKeeper:  zooKeeperContainer,
-		Connection: clickhouseConn,
-		TCPPort:    mappedTCPPort,
-		HTTPPort:   mappedHTTPPort,
-		Host:       host,
-		Username:   cfg.ClickHouseUser,
-		Password:   cfg.ClickHousePassword,
-		Database:   cfg.ClickHouseDatabase,
+		container: container,
+		zooKeeper: zooKeeperContainer,
+		TCPPort:   mappedTCPPort,
+		HTTPPort:  mappedHTTPPort,
+		Host:      host,
+		Username:  cfg.ClickHouseUser,
+		Password:  cfg.ClickHousePassword,
+		Database:  cfg.ClickHouseDatabase,
 	}, nil
 }
 
@@ -182,7 +180,7 @@ func (c *ClickhouseContainer) Close(ctx context.Context) error {
 	return err
 }
 
-func createConfig() (string, error) {
+func createClickHouse01Config() (string, error) {
 	cfgXmlString := `
 <clickhouse>
 	<company>
@@ -224,10 +222,6 @@ func createConfig() (string, error) {
 				<shard>
 					<replica>
 						<host>clickhouse01</host>
-						<port>9000</port>
-					</replica>
-					<replica>
-						<host>clickhouse02</host>
 						<port>9000</port>
 					</replica>
 				</shard>

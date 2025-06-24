@@ -192,7 +192,6 @@ go
 type ClickhouseContainer struct {
 	container  testcontainers.Container
 	zooKeeper  testcontainers.Container
-	Connection *sql.DB
 	TCPPort    nat.Port
 	HTTPPort   nat.Port
 	Host       string
@@ -201,7 +200,6 @@ type ClickhouseContainer struct {
 	Database   string
 }
 ```
-U can use existing open connection or create new one using params returned in struct
 
 
 
