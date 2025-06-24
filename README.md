@@ -145,4 +145,60 @@ know the file size, and buffer grows wth every write operation that goes out of 
 differs less than 600 MB. So using temp file is more memory efficient while xlsx does not support proper streaming with
 memory flushes and cursor management.
 
+# test_containers 
+## Clickhouse Cluster Docker Container for Tests
+
+Example of usage:
+
+```go
+package test
+
+import (
+	"context"
+	"fmt"
+	"testing"
+
+	"github.com/billz-2/packages/pkg/test_environment"
+	"github.com/stretchr/testify/require"
+)
+
+func TestClickHouseContainer(t *testing.T) {
+	config := test_environment.Config{
+		ClickHouseUser:     "test_user",
+		ClickHousePassword: "test_password",
+		ClickHouseDatabase: "test_db",
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	// Initialize the ClickHouse container
+	container, err := test_environment.SetupClickhouse(ctx, config)
+	if err != nil {
+		t.Fatalf("Failed to create ClickHouse container: %v", err)
+	}
+
+	require.NoError(t, err)
+	err = container.Close(ctx)
+	cancel()
+	require.NoError(t, err)
+}
+```
+Container will be returned only when it's ready and connection is established.
+If connection won;t be established you will receive error.
+
+Method return `*test_environment.ClickhouseContainer`
+```
+go
+
+type ClickhouseContainer struct {
+	container  testcontainers.Container
+	zooKeeper  testcontainers.Container
+	TCPPort    nat.Port
+	HTTPPort   nat.Port
+	Host       string
+	Username   string
+	Password   string
+	Database   string
+}
+```
+
+
 
