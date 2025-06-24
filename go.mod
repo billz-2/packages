@@ -1,8 +1,6 @@
 module github.com/billz-2/packages
 
-go 1.23.8
-
-toolchain go1.24.2
+go 1.23.5
 
 require (
 	github.com/IBM/sarama v1.45.0
