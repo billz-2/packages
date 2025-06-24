@@ -2,7 +2,6 @@ package test
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/billz-2/packages/pkg/test_environment"
@@ -23,7 +22,6 @@ func TestClickHouseContainer(t *testing.T) {
 	}
 
 	require.NoError(t, err)
-	fmt.Println(container)
 	err = container.Close(ctx)
 	cancel()
 	require.NoError(t, err)

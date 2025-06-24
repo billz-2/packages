@@ -175,8 +175,7 @@ func TestClickHouseContainer(t *testing.T) {
 		t.Fatalf("Failed to create ClickHouse container: %v", err)
 	}
 
-	require.True(t, container.Container.IsRunning())
-	fmt.Println(container)
+	require.NoError(t, err)
 	err = container.Close(ctx)
 	cancel()
 	require.NoError(t, err)
