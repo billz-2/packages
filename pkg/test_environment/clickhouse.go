@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/docker/docker/api/types/container"
 	"github.com/docker/go-connections/nat"
 	"github.com/pkg/errors"
 	"github.com/testcontainers/testcontainers-go"
@@ -17,14 +18,14 @@ import (
 
 // ClickhouseContainer представляет собой контейнер с Clickhouse для тестирования
 type ClickhouseContainer struct {
-	container testcontainers.Container
-	zooKeeper testcontainers.Container
-	TCPPort   nat.Port
-	HTTPPort  nat.Port
-	Host      string
-	Username  string
-	Password  string
-	Database  string
+	chContainer testcontainers.Container
+	zooKeeper   testcontainers.Container
+	TCPPort     nat.Port
+	HTTPPort    nat.Port
+	Host        string
+	Username    string
+	Password    string
+	Database    string
 }
 
 const internalTCPClickhousePort = 9000
@@ -71,7 +72,7 @@ func SetupClickhouse(ctx context.Context, cfg Config) (*ClickhouseContainer, err
 		}
 	}()
 
-	container, err := clickhouseModule.Run(ctx,
+	clickHouseContainer, err := clickhouseModule.Run(ctx,
 		"clickhouse/clickhouse-server:22.8.1.2097-alpine",
 		clickhouseModule.WithUsername(cfg.ClickHouseUser),
 		clickhouseModule.WithPassword(cfg.ClickHousePassword),
@@ -90,7 +91,7 @@ func SetupClickhouse(ctx context.Context, cfg Config) (*ClickhouseContainer, err
 
 	maxRetries := 8
 	for i := 0; i < maxRetries; i++ {
-		_, err = container.Endpoint(ctx, "")
+		_, err = clickHouseContainer.Endpoint(ctx, "")
 		if err == nil {
 			break
 		}
@@ -102,17 +103,17 @@ func SetupClickhouse(ctx context.Context, cfg Config) (*ClickhouseContainer, err
 		time.Sleep(time.Second * 10)
 	}
 
-	mappedTCPPort, err := container.MappedPort(ctx, nat.Port(fmt.Sprintf("%d/tcp", internalTCPClickhousePort)))
+	mappedTCPPort, err := clickHouseContainer.MappedPort(ctx, nat.Port(fmt.Sprintf("%d/tcp", internalTCPClickhousePort)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get mapped TCP port: %w", err)
 	}
 
-	mappedHTTPPort, err := container.MappedPort(ctx, nat.Port(fmt.Sprintf("%d/tcp", internalHttpClickhousePort)))
+	mappedHTTPPort, err := clickHouseContainer.MappedPort(ctx, nat.Port(fmt.Sprintf("%d/tcp", internalHttpClickhousePort)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get mapped HTTP port: %w", err)
 	}
 
-	host, err := container.Host(ctx)
+	host, err := clickHouseContainer.Host(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get host: %w", err)
 	}
@@ -157,27 +158,52 @@ func SetupClickhouse(ctx context.Context, cfg Config) (*ClickhouseContainer, err
 	}
 
 	return &ClickhouseContainer{
-		container: container,
-		zooKeeper: zooKeeperContainer,
-		TCPPort:   mappedTCPPort,
-		HTTPPort:  mappedHTTPPort,
-		Host:      host,
-		Username:  cfg.ClickHouseUser,
-		Password:  cfg.ClickHousePassword,
-		Database:  cfg.ClickHouseDatabase,
+		chContainer: clickHouseContainer,
+		zooKeeper:   zooKeeperContainer,
+		TCPPort:     mappedTCPPort,
+		HTTPPort:    mappedHTTPPort,
+		Host:        host,
+		Username:    cfg.ClickHouseUser,
+		Password:    cfg.ClickHousePassword,
+		Database:    cfg.ClickHouseDatabase,
 	}, nil
 }
 
 // Close останавливает и удаляет все контнейры для Clickhouse cluster
 func (c *ClickhouseContainer) Close(ctx context.Context) error {
-	err := c.container.Terminate(ctx, testcontainers.RemoveVolumes())
-	if err != nil {
-		fmt.Printf("can't stop clickhouse: %v\n", err)
+	if c.chContainer != nil {
+		containerState, err := c.chContainer.State(ctx)
+		if err != nil {
+			return errors.Wrap(err, "failed to get ClickHouse container state")
+		}
+
+		if !containerState.Running && containerState.Status != container.StateRunning {
+			return nil
+		}
+
+		err = c.chContainer.Terminate(ctx, testcontainers.RemoveVolumes())
+		if err != nil {
+			return errors.Wrap(err, "can't stop clickhouse")
+		}
 	}
 
-	err = c.zooKeeper.Terminate(ctx)
+	if c.zooKeeper != nil {
+		containerState, err := c.zooKeeper.State(ctx)
+		if err != nil {
+			return errors.Wrap(err, "failed to get ZooKeeper container state")
+		}
 
-	return err
+		if !containerState.Running && containerState.Status != container.StateRunning {
+			return nil
+		}
+
+		err = c.zooKeeper.Terminate(ctx, testcontainers.RemoveVolumes())
+		if err != nil {
+			return errors.Wrap(err, "can't stop ZooKeeper")
+		}
+	}
+
+	return nil
 }
 
 func createClickHouse01Config() (string, error) {
