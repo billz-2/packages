@@ -22,7 +22,16 @@ type PostgresContainer struct {
 	ExposedPort string
 }
 
-func SetupPostgres(ctx context.Context, cfg Config) (*PostgresContainer, error) {
+func SetupPostgres(ctx context.Context, cfg Config) (postgresConn *sqlx.DB, databaseUrl string, postgresContainer testcontainers.Container, err error) {
+	pgContainer, err := SetupPostgresV2(ctx, cfg)
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("failed to setup Postgres container: %w", err)
+	}
+
+	return pgContainer.Conn, pgContainer.DatabaseUrl, pgContainer.Container, nil
+}
+
+func SetupPostgresV2(ctx context.Context, cfg Config) (*PostgresContainer, error) {
 	internalPort := 5432
 	exposedPort, err := GetFreePort()
 	if err != nil {
