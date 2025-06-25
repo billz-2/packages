@@ -46,6 +46,7 @@ func SetupPostgres(ctx context.Context, cfg Config) (postgresConn *sqlx.DB, data
 			Name:         uuid.NewString(),
 			User:         user,
 			AutoRemove:   true,
+			SkipReaper:   true,
 		}
 
 		postgresContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
@@ -56,7 +57,7 @@ func SetupPostgres(ctx context.Context, cfg Config) (postgresConn *sqlx.DB, data
 			return nil, "", nil, err
 		}
 
-		// Add retry logic for container endpoint
+		// Add retry logic for chContainer endpoint
 		var endpoint string
 		maxRetries := 8
 		for i := 0; i < maxRetries; i++ {
