@@ -22,7 +22,7 @@ func TestClickHouseContainer(t *testing.T) {
 	}
 
 	require.NoError(t, err)
-	err = container.Close(ctx)
+	err = container.Stop(ctx)
 	cancel()
 	require.NoError(t, err)
 }
