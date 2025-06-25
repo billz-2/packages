@@ -44,6 +44,8 @@ func SetupPostgresV2(ctx context.Context, cfg Config) (*PostgresContainer, error
 		databaseUrl       string
 		conStr            string
 	)
+	port := cfg.PostgresPort
+
 	if cfg.Environment != "local" {
 		// Increase timeout and polling interval for more stability
 		ws := wait.NewHostPortStrategy(nat.Port(fmt.Sprintf("%d/tcp", internalPort))).
@@ -80,10 +82,9 @@ func SetupPostgresV2(ctx context.Context, cfg Config) (*PostgresContainer, error
 		}
 
 		// Add retry logic for chContainer endpoint
-		var endpoint string
 		maxRetries := 8
 		for i := 0; i < maxRetries; i++ {
-			endpoint, err = postgresContainer.Endpoint(ctx, "")
+			_, err = postgresContainer.Endpoint(ctx, "")
 			if err == nil {
 				break
 			}
@@ -94,27 +95,23 @@ func SetupPostgresV2(ctx context.Context, cfg Config) (*PostgresContainer, error
 
 			time.Sleep(time.Second * 10)
 		}
-
-		host := getHost(endpoint)
-		conStr = getDatabaseConnectionString(
-			exposedPort,
-			host,
-			user,
-			password,
-			database,
-		)
-		databaseUrl = getDatabaseUrl(exposedPort, host, user, password, database)
-	} else {
-		conStr = fmt.Sprintf("host=%s port=%v user=%s password=%s dbname=%s sslmode=%s",
-			cfg.PostgresHost,
-			cfg.PostgresPort,
-			cfg.PostgresUser,
-			cfg.PostgresPassword,
-			cfg.PostgresDatabase,
-			"disable",
-		)
-		databaseUrl = getDatabaseUrl(cfg.PostgresPort, cfg.PostgresHost, cfg.PostgresUser, cfg.PostgresPassword, cfg.PostgresDatabase)
+		port = exposedPort
 	}
+
+	conStr = getDatabaseConnectionString(
+		port,
+		cfg.PostgresHost,
+		cfg.PostgresUser,
+		cfg.PostgresPassword,
+		cfg.PostgresDatabase,
+	)
+	databaseUrl = getDatabaseUrl(
+		port,
+		cfg.PostgresHost,
+		cfg.PostgresUser,
+		cfg.PostgresPassword,
+		cfg.PostgresDatabase,
+	)
 
 	// Add retry logic for database connection
 	maxRetries := 8
