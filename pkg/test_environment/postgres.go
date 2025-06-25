@@ -20,10 +20,16 @@ type PostgresContainer struct {
 	Container   testcontainers.Container
 	DatabaseUrl string
 	ExposedPort string
+	Network     *testcontainers.DockerNetwork
 }
 
 func SetupPostgres(ctx context.Context, cfg Config) (postgresConn *sqlx.DB, databaseUrl string, postgresContainer testcontainers.Container, err error) {
-	pgContainer, err := SetupPostgresV2(ctx, cfg)
+	network, err := CreateDockerNetwork(ctx)
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("failed to create Docker network: %w", err)
+	}
+
+	pgContainer, err := SetupPostgresV2(ctx, cfg, network)
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("failed to setup Postgres container: %w", err)
 	}
@@ -31,7 +37,7 @@ func SetupPostgres(ctx context.Context, cfg Config) (postgresConn *sqlx.DB, data
 	return pgContainer.Conn, pgContainer.DatabaseUrl, pgContainer.Container, nil
 }
 
-func SetupPostgresV2(ctx context.Context, cfg Config) (*PostgresContainer, error) {
+func SetupPostgresV2(ctx context.Context, cfg Config, network *testcontainers.DockerNetwork) (*PostgresContainer, error) {
 	internalPort := 5432
 	exposedPort, err := GetFreePort()
 	if err != nil {
@@ -68,6 +74,7 @@ func SetupPostgresV2(ctx context.Context, cfg Config) (*PostgresContainer, error
 			ExposedPorts: []string{fmt.Sprintf("%d:%d/tcp", exposedPort, internalPort)},
 			WaitingFor:   ws,
 			Name:         uuid.NewString(),
+			Networks:     []string{network.Name},
 			User:         user,
 			AutoRemove:   true,
 			SkipReaper:   true,
