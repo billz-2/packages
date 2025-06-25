@@ -165,7 +165,7 @@ func SetupClickhouse(ctx context.Context, cfg Config) (*ClickhouseContainer, err
 
 	if connectErr != nil {
 		initErr := fmt.Errorf("could not connect to ClickHouse after %d retries error: %w", maxRetries, connectErr)
-		err = result.Close(ctx) // Clean up resources if connection fails
+		err = result.Stop(ctx) // Clean up resources if connection fails
 		if err != nil {
 			return nil, errors.Wrap(err, initErr.Error())
 		}
@@ -176,8 +176,8 @@ func SetupClickhouse(ctx context.Context, cfg Config) (*ClickhouseContainer, err
 	return &result, nil
 }
 
-// Close останавливает и удаляет все контнейры для Clickhouse cluster
-func (c *ClickhouseContainer) Close(ctx context.Context) error {
+// Stop останавливает и удаляет все контнейры для Clickhouse cluster
+func (c *ClickhouseContainer) Stop(ctx context.Context) error {
 	if c.chContainer != nil {
 		containerState, err := c.chContainer.State(ctx)
 		if err != nil {
