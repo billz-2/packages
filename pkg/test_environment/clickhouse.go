@@ -55,7 +55,7 @@ func SetupClickhouse(ctx context.Context, cfg Config) (*ClickhouseContainer, err
 		Started: true,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create zooKeeper chContainer: %w", err)
+		return nil, fmt.Errorf("failed to create zooKeeper container: %w", err)
 	}
 
 	ipaddr, err := zooKeeperContainer.ContainerIP(ctx)
@@ -86,7 +86,7 @@ func SetupClickhouse(ctx context.Context, cfg Config) (*ClickhouseContainer, err
 	)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Clickhouse chContainer: %w", err)
+		return nil, fmt.Errorf("failed to create Clickhouse container: %w", err)
 	}
 
 	maxRetries := 8
@@ -190,14 +190,14 @@ func (c *ClickhouseContainer) Close(ctx context.Context) error {
 	if c.zooKeeper != nil {
 		containerState, err := c.zooKeeper.State(ctx)
 		if err != nil {
-			return errors.Wrap(err, "failed to get ooKeeper container state")
+			return errors.Wrap(err, "failed to get ZooKeeper container state")
 		}
 
 		if !containerState.Running && containerState.Status != container.StateRunning {
 			return nil
 		}
 
-		err = c.zooKeeper.Terminate(ctx)
+		err = c.zooKeeper.Terminate(ctx, testcontainers.RemoveVolumes())
 		if err != nil {
 			return errors.Wrap(err, "can't stop ZooKeeper")
 		}
