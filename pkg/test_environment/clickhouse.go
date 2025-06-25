@@ -152,12 +152,7 @@ func SetupClickhouse(ctx context.Context, cfg Config) (*ClickhouseContainer, err
 		}
 	}
 
-	if connectErr != nil {
-		// Возвращаем ошибку вместо log.Fatal
-		return nil, fmt.Errorf("не удалось подключиться к ClickHouse после %d попыток: %w", maxRetries, connectErr)
-	}
-
-	return &ClickhouseContainer{
+	result := ClickhouseContainer{
 		chContainer: clickHouseContainer,
 		zooKeeper:   zooKeeperContainer,
 		TCPPort:     mappedTCPPort,
@@ -166,7 +161,19 @@ func SetupClickhouse(ctx context.Context, cfg Config) (*ClickhouseContainer, err
 		Username:    cfg.ClickHouseUser,
 		Password:    cfg.ClickHousePassword,
 		Database:    cfg.ClickHouseDatabase,
-	}, nil
+	}
+
+	if connectErr != nil {
+		initErr := fmt.Errorf("could not connect to ClickHouse after %d retries error: %w", maxRetries, connectErr)
+		err = result.Close(ctx) // Clean up resources if connection fails
+		if err != nil {
+			return nil, errors.Wrap(err, initErr.Error())
+		}
+
+		return nil, initErr
+	}
+
+	return &result, nil
 }
 
 // Close останавливает и удаляет все контнейры для Clickhouse cluster
