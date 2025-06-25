@@ -150,6 +150,7 @@ func SetupPostgresV2(ctx context.Context, cfg Config, network *testcontainers.Do
 		Container:   postgresContainer,
 		DatabaseUrl: databaseUrl,
 		ExposedPort: strconv.Itoa(exposedPort),
+		Network:     network,
 	}, nil
 }
 
