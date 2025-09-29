@@ -30,7 +30,7 @@ func SetupRedis(ctx context.Context, cfg Config) (
 		WithStartupTimeout(5 * time.Minute)
 
 	req := testcontainers.ContainerRequest{
-		Image:        "bitnami/redis:latest",
+		Image:        "bitnamilegacy/redis:latest",
 		ExposedPorts: []string{fmt.Sprintf("%d:%d/tcp", exposedPort, internalPort)},
 		Env: map[string]string{
 			"ALLOW_EMPTY_PASSWORD": "yes",
