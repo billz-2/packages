@@ -23,7 +23,7 @@ type PostgresContainer struct {
 	Network     *testcontainers.DockerNetwork
 }
 
-func SetupPostgres(ctx context.Context, cfg Config) (postgresConn *sqlx.DB, databaseUrl string, postgresContainer testcontainers.Container, err error) {
+func SetupPostgres(ctx context.Context, cfg Config) (postgresConn *sqlx.DB, databaseUrl string, closeFunc func(), err error) {
 	network, err := CreateDockerNetwork(ctx)
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("failed to create Docker network: %w", err)
@@ -34,7 +34,13 @@ func SetupPostgres(ctx context.Context, cfg Config) (postgresConn *sqlx.DB, data
 		return nil, "", nil, fmt.Errorf("failed to setup Postgres container: %w", err)
 	}
 
-	return pgContainer.Conn, pgContainer.DatabaseUrl, pgContainer.Container, nil
+	closeFunc = func() {
+		if pgContainer.Container != nil {
+			pgContainer.Container.Terminate(ctx)
+		}
+		network.Remove(ctx)
+	}
+	return pgContainer.Conn, pgContainer.DatabaseUrl, closeFunc, nil
 }
 
 func SetupPostgresV2(ctx context.Context, cfg Config, network *testcontainers.DockerNetwork) (*PostgresContainer, error) {
