@@ -27,24 +27,16 @@ func SetupPostgres(
 	ctx context.Context,
 	cfg Config,
 ) (postgresConn *sqlx.DB, databaseUrl string, closeFunc func() error, err error) {
-	network, err := CreateDockerNetwork(ctx)
-	if err != nil {
-		return nil, "", nil, fmt.Errorf("failed to create Docker network: %w", err)
-	}
-
-	pgContainer, err := SetupPostgresV2(ctx, cfg, network)
+	pgContainer, err := SetupPostgresV2(ctx, cfg, nil)
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("failed to setup Postgres container: %w", err)
 	}
 
 	closeFunc = func() error {
 		if pgContainer.Container != nil {
-			pgContainer.Container.Terminate(ctx)
+			_ = pgContainer.Container.Terminate(ctx)
 		}
-		err = network.Remove(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to remove network: %w", err)
-		}
+
 		return nil
 	}
 	return pgContainer.Conn, pgContainer.DatabaseUrl, closeFunc, nil
@@ -87,10 +79,13 @@ func SetupPostgresV2(ctx context.Context, cfg Config, network *testcontainers.Do
 			ExposedPorts: []string{fmt.Sprintf("%d:%d/tcp", exposedPort, internalPort)},
 			WaitingFor:   ws,
 			Name:         uuid.NewString(),
-			Networks:     []string{network.Name},
 			User:         user,
 			AutoRemove:   true,
 			SkipReaper:   true,
+		}
+
+		if network != nil {
+			req.Networks = []string{network.Name}
 		}
 
 		postgresContainer, err = testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
