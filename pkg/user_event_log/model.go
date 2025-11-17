@@ -28,7 +28,7 @@ type EventLogReq struct {
 	EventID          string   `json:"event_id"`           // event union id
 	EventActionType  string   `json:"event_action_type"`  // 'create', 'update', 'delete'
 	EventSource      string   `json:"event_source"`       // topic: catalog, inv, order, fin
-	ParentObjectName string   `json:"parent_object_name"` // 'product_id' for product child entities, 'order_id' for order children
+	ParentObjectName string   `json:"parent_object_name"` // 'product_id' for product child entities, 'order_id' for order childs
 	ParentObjectID   string   `json:"parent_object_id"`   // product_id, order_id, supplier_id
 	ObjectID         string   `json:"object_id"`          // entity_id (product_id, category_id, order_id)
 	ObjectType       string   `json:"object_type"`        //'product', 'product_price', 'product_detail','order','product_attribute'

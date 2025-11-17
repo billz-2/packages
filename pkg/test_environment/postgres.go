@@ -3,6 +3,7 @@ package test_environment
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,14 +15,35 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
+type PostgresContainer struct {
+	Conn        *sqlx.DB
+	Container   testcontainers.Container
+	DatabaseUrl string
+	ExposedPort string
+}
+
 func SetupPostgres(ctx context.Context, cfg Config) (postgresConn *sqlx.DB, databaseUrl string, postgresContainer testcontainers.Container, err error) {
+	pgContainer, err := SetupPostgresV2(ctx, cfg)
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("failed to setup Postgres container: %w", err)
+	}
+
+	return pgContainer.Conn, pgContainer.DatabaseUrl, pgContainer.Container, nil
+}
+
+func SetupPostgresV2(ctx context.Context, cfg Config) (*PostgresContainer, error) {
 	internalPort := 5432
 	exposedPort, err := GetFreePort()
 	if err != nil {
-		return nil, "", nil, err
+		return nil, err
 	}
 
-	var conStr string
+	var (
+		postgresConn      *sqlx.DB
+		postgresContainer testcontainers.Container
+		databaseUrl       string
+		conStr            string
+	)
 	if cfg.Environment != "local" {
 		// Increase timeout and polling interval for more stability
 		ws := wait.NewHostPortStrategy(nat.Port(fmt.Sprintf("%d/tcp", internalPort))).
@@ -45,17 +67,18 @@ func SetupPostgres(ctx context.Context, cfg Config) (postgresConn *sqlx.DB, data
 			Name:         uuid.NewString(),
 			User:         user,
 			AutoRemove:   true,
+			SkipReaper:   true,
 		}
 
-		postgresContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		postgresContainer, err = testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 			ContainerRequest: req,
 			Started:          true,
 		})
 		if err != nil {
-			return nil, "", nil, err
+			return nil, err
 		}
 
-		// Add retry logic for container endpoint
+		// Add retry logic for chContainer endpoint
 		var endpoint string
 		maxRetries := 8
 		for i := 0; i < maxRetries; i++ {
@@ -65,7 +88,7 @@ func SetupPostgres(ctx context.Context, cfg Config) (postgresConn *sqlx.DB, data
 			}
 
 			if i == maxRetries-1 {
-				return nil, "", nil, fmt.Errorf("failed to get endpoint after %d retries: %w", maxRetries, err)
+				return nil, fmt.Errorf("failed to get endpoint after %d retries: %w", maxRetries, err)
 			}
 
 			time.Sleep(time.Second * 10)
@@ -106,15 +129,23 @@ func SetupPostgres(ctx context.Context, cfg Config) (postgresConn *sqlx.DB, data
 
 		if i == maxRetries-1 {
 			if postgresContainer != nil {
-				_ = postgresContainer.Terminate(ctx)
+				if postgresContainer.IsRunning() {
+					_ = postgresContainer.Terminate(ctx)
+				}
 			}
-			return nil, "", nil, fmt.Errorf("failed to connect to database after %d retries: %w", maxRetries, err)
+
+			return nil, fmt.Errorf("failed to connect to database after %d retries: %w", maxRetries, err)
 		}
 
 		time.Sleep(time.Second * 10)
 	}
 
-	return postgresConn, databaseUrl, postgresContainer, nil
+	return &PostgresContainer{
+		Conn:        postgresConn,
+		Container:   postgresContainer,
+		DatabaseUrl: databaseUrl,
+		ExposedPort: strconv.Itoa(exposedPort),
+	}, nil
 }
 
 func getHost(e string) string {

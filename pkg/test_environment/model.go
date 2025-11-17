@@ -12,4 +12,7 @@ type Config struct {
 	ElasticSearchPassword string
 	RedisAddress          string
 	RedisPort             string
+	ClickHouseUser        string
+	ClickHousePassword    string
+	ClickHouseDatabase    string
 }
