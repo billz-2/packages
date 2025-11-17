@@ -4,3 +4,4 @@ vendor
 .vscode
 storage
 .DS_Store
+*.user
