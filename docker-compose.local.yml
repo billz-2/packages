@@ -1,0 +1,113 @@
+version: "3.7"
+name: "billz_services_local"
+services:
+  db:
+    container_name: postgres
+    image: "postgis/postgis:12-3.4"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    command: >
+      postgres -c logging_collector=on
+               -c log_destination=stderr
+               -c log_statement=all
+               -c log_min_duration_statement=0
+  # https://stackoverflow.com/questions/46627979/what-is-the-default-user-and-password-for-elasticsearch
+  # https://www.elastic.co/guide/en/x-pack/current/security-getting-started.html
+  elasticsearch:
+    build:
+      context: .
+      dockerfile: Dockerfile.elasticsearch
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - http.port=9200
+      - http.cors.enabled=true
+      - http.cors.allow-origin="*"
+      - http.cors.allow-headers=X-Requested-With,X-Auth-Token,Content-Type,Content-Length,Authorization
+      - http.cors.allow-credentials=true
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms600m -Xmx600m"
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    # network_mode: host
+  # http://localhost:5601/app/dev_tools#/console
+  kibana:
+    depends_on:
+      - elasticsearch
+    image: docker.elastic.co/kibana/kibana:9.0.4
+    #    ports:
+    #      - 5601:5601
+    network_mode: host
+    environment:
+      - SERVERNAME=kibana
+      - ELASTICSEARCH_HOSTS=http://127.0.0.1:9200
+      - ELASTICSEARCH_USERNAME=kibana
+      - ELASTICSEARCH_PASSWORD=kibana
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - 22181:2181
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    depends_on:
+      - zookeeper
+    ports:
+      - 29092:29092
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+  kafdrop:
+    image: obsidiandynamics/kafdrop
+    restart: "no"
+    ports:
+      - "9999:9000"
+    environment:
+      KAFKA_BROKERCONNECT: "kafka:9092"
+      JVM_OPTS: "-Xms16M -Xmx48M -Xss180K -XX:-TieredCompilation -XX:+UseStringDeduplication -noverify"
+    depends_on:
+      - "kafka"
+
+  minio:
+    image: minio/minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      #      - ./storage/minio:/data
+      - minio_data:/data
+
+    environment:
+      MINIO_ACCESS_KEY: 2wjyybzuy3g4ednkmpgmhczzdvfbk87d
+      MINIO_SECRET_KEY: tgetjnczdxx9engvkthsy8cy8p25yqmz
+      MINIO_ADDRESS: ':9000'
+      MINIO_CONSOLE_ADDRESS: ':9001'
+    command: server /data
+
+  cache:
+    image: docker.io/bitnamilegacy/redis:7.2
+    environment:
+      - ALLOW_EMPTY_PASSWORD=yes
+      - REDIS_PASSWORD=""
+      - REDIS_DATABASE=0
+    ports:
+      - "6379:6379"
+
+volumes:
+  pg_data:
+  minio_data:

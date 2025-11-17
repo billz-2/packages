@@ -37,16 +37,37 @@ func SetupElastic(ctx context.Context, cfg Config) (esConfig elasticsearch.Confi
 
 	req := testcontainers.ContainerRequest{
 
-		Image: "docker.elastic.co/elasticsearch/elasticsearch:7.13.1",
+		Image: "docker.elastic.co/elasticsearch/elasticsearch:9.0.4",
 		Name:  "elastic-mock" + uuid.NewString(),
 		Env: map[string]string{
-			"discovery.type": "single-node",
-			"ES_JAVA_OPTS":   "-Xms512m -Xmx512m",
+			"discovery.type":         "single-node",
+			"ES_JAVA_OPTS":           "-Xms512m -Xmx512m",
+			"xpack.security.enabled": "false",
 		},
 		ExposedPorts: []string{fmt.Sprintf("%d:%d/tcp", exposedPort, internalPort)},
 		//WaitingFor:   wait.ForLog("started"),
 		WaitingFor: ws,
 		AutoRemove: true,
+		LifecycleHooks: []testcontainers.ContainerLifecycleHooks{
+			{
+				PostStarts: []testcontainers.ContainerHook{
+					func(ctx context.Context, c testcontainers.Container) error {
+						// Install the analysis-icu plugin
+						exitCode, _, err := c.Exec(ctx, []string{
+							"elasticsearch-plugin", "install", "analysis-icu",
+						})
+						if err != nil {
+							return fmt.Errorf("failed to execute plugin install: %w", err)
+						}
+						if exitCode != 0 {
+							return fmt.Errorf("plugin installation failed with exit code %d", exitCode)
+						}
+
+						return nil
+					},
+				},
+			},
+		},
 	}
 	elastic, err = testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: req,
