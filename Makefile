@@ -1,3 +1,8 @@
+ifneq ("$(wildcard Makefile.user)", "")
+include Makefile.user
+endif
+
+
 bench-all:
 	go test -bench=. -benchtime=1s ./test/...
 
@@ -24,3 +29,7 @@ test-clean:
 # Базовое тестирование с детальным выводом
 test:
 	go test -v ./test/...
+
+.DEFAULT_GOAL:=run
+
+.PHONY: test
