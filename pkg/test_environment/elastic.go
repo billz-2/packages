@@ -5,11 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/billz-2/packages/pkg/logger"
-
 	"github.com/docker/go-connections/nat"
 	"github.com/elastic/go-elasticsearch/v8"
-	"github.com/google/uuid"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
@@ -23,46 +20,47 @@ func SetupElastic(ctx context.Context, cfg Config) (esConfig elasticsearch.Confi
 		}, elastic, nil
 	}
 
-	exposedPort, err := GetFreePort()
-	if err != nil {
-		logger.Log.Error("Could not get free port", logger.Error(err))
-		return esConfig, nil, err
-	}
+	internalPort := "9200/tcp"
 
-	internalPort := 9200
-	ws := wait.ForHTTP("/").
-		WithPort(nat.Port(fmt.Sprintf("%d/tcp", internalPort))).
+	ws := wait.ForLog("started").
 		WithPollInterval(1 * time.Second).
 		WithStartupTimeout(5 * time.Minute)
 
 	req := testcontainers.ContainerRequest{
 		Image: "venomuz/elastic_analysis-icu:9.0.4",
-		Name:  "elastic-mock" + uuid.NewString(),
+		// Remove Name field to avoid conflicts
 		Env: map[string]string{
 			"discovery.type":                  "single-node",
 			"ES_JAVA_OPTS":                    "-Xms512m -Xmx512m",
 			"xpack.security.enabled":          "false",
 			"xpack.security.http.ssl.enabled": "false",
 		},
-		ExposedPorts: []string{fmt.Sprintf("%d:%d/tcp", exposedPort, internalPort)},
-		//WaitingFor:   wait.ForLog("started"),
-		WaitingFor: ws,
-		AutoRemove: true,
+		ExposedPorts: []string{internalPort},
+		WaitingFor:   ws,
+		// Remove AutoRemove in test context to allow proper cleanup
 	}
+
 	elastic, err = testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: req,
 		Started:          true,
 	})
 	if err != nil {
-		return elasticsearch.Config{}, nil, err
+		return elasticsearch.Config{}, nil, fmt.Errorf("failed to create container: %w", err)
+	}
+
+	// Get the mapped port
+	mappedPort, err := elastic.MappedPort(ctx, nat.Port(internalPort))
+	if err != nil {
+		return elasticsearch.Config{}, nil, fmt.Errorf("failed to get mapped port: %w", err)
 	}
 
 	ip, err := elastic.Host(ctx)
 	if err != nil {
-		return elasticsearch.Config{}, nil, err
+		return elasticsearch.Config{}, nil, fmt.Errorf("failed to get host: %w", err)
 	}
 
-	elasticAddress := fmt.Sprintf("http://%s:%d", ip, exposedPort)
+	elasticAddress := fmt.Sprintf("http://%s:%s", ip, mappedPort.Port())
+
 	return elasticsearch.Config{
 		Addresses: []string{elasticAddress},
 		Username:  "elastic",
