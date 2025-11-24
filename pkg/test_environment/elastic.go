@@ -7,6 +7,7 @@ import (
 
 	"github.com/billz-2/packages/pkg/logger"
 
+	"github.com/docker/go-connections/nat"
 	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/google/uuid"
 	"github.com/testcontainers/testcontainers-go"
@@ -29,8 +30,9 @@ func SetupElastic(ctx context.Context, cfg Config) (esConfig elasticsearch.Confi
 	}
 
 	internalPort := 9200
-
-	ws := wait.ForListeningPort("9200/tcp").
+	ws := wait.ForHTTP("/").
+		WithPort(nat.Port(fmt.Sprintf("%d/tcp", internalPort))).
+		WithPollInterval(1 * time.Second).
 		WithStartupTimeout(5 * time.Minute)
 
 	req := testcontainers.ContainerRequest{
@@ -41,26 +43,23 @@ func SetupElastic(ctx context.Context, cfg Config) (esConfig elasticsearch.Confi
 			"ES_JAVA_OPTS":                    "-Xms512m -Xmx512m",
 			"xpack.security.enabled":          "false",
 			"xpack.security.http.ssl.enabled": "false",
-			"http.host":                       "0.0.0.0",
-			"network.bind_host":               "0.0.0.0",
-			"network.publish_host":            "0.0.0.0",
 		},
 		ExposedPorts: []string{fmt.Sprintf("%d:%d/tcp", exposedPort, internalPort)},
-		WaitingFor:   ws,
+		//WaitingFor:   wait.ForLog("started"),
+		WaitingFor: ws,
+		AutoRemove: true,
 	}
 	elastic, err = testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: req,
 		Started:          true,
 	})
 	if err != nil {
-		return elasticsearch.Config{}, nil, fmt.Errorf("failed to start elasticsearch container: %w", err)
+		return elasticsearch.Config{}, nil, err
 	}
-
-	time.Sleep(3 * time.Second)
 
 	ip, err := elastic.Host(ctx)
 	if err != nil {
-		return elasticsearch.Config{}, nil, fmt.Errorf("failed to get container host: %w", err)
+		return elasticsearch.Config{}, nil, err
 	}
 
 	elasticAddress := fmt.Sprintf("http://%s:%d", ip, exposedPort)
