@@ -36,10 +36,7 @@ func SetupElastic(ctx context.Context, cfg Config) (esConfig elasticsearch.Confi
 		WithStartupTimeout(5 * time.Minute)
 
 	req := testcontainers.ContainerRequest{
-		FromDockerfile: testcontainers.FromDockerfile{
-			Context:    "../../",
-			Dockerfile: "Dockerfile.elasticsearch",
-		},
+		Image: "elasticsearch:9.0.4",
 		Env: map[string]string{
 			"discovery.type":                  "single-node",
 			"ES_JAVA_OPTS":                    "-Xms512m -Xmx512m",
@@ -58,6 +55,27 @@ func SetupElastic(ctx context.Context, cfg Config) (esConfig elasticsearch.Confi
 	if err != nil {
 		return elasticsearch.Config{}, nil, err
 	}
+
+	logger.Log.Info("Installing analysis-icu plugin...")
+	exitCode, output, err := elastic.Exec(ctx, []string{"elasticsearch-plugin", "install", "-b", "analysis-icu"})
+	if err != nil || exitCode != 0 {
+		logger.Log.Error("Failed to install plugin", logger.Error(err), logger.Any("output", output))
+		return elasticsearch.Config{}, nil, fmt.Errorf("failed to install plugin: %v, output: %s", err, output)
+	}
+	logger.Log.Info("Plugin installed successfully")
+
+	logger.Log.Info("Restarting Elasticsearch...")
+	if err := elastic.Stop(ctx, nil); err != nil {
+		logger.Log.Error("Failed to stop container", logger.Error(err))
+		return elasticsearch.Config{}, nil, err
+	}
+
+	if err := elastic.Start(ctx); err != nil {
+		logger.Log.Error("Failed to start container", logger.Error(err))
+		return elasticsearch.Config{}, nil, err
+	}
+
+	logger.Log.Info("Waiting for Elasticsearch to be ready...")
 
 	ip, err := elastic.Host(ctx)
 	if err != nil {
