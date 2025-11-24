@@ -32,17 +32,17 @@ func SetupElastic(ctx context.Context, cfg Config) (esConfig elasticsearch.Confi
 	internalPort := 9200
 	ws := wait.ForHTTP("/").
 		WithPort(nat.Port(fmt.Sprintf("%d/tcp", internalPort))).
-		WithPollInterval(100 * time.Millisecond).
+		WithPollInterval(1 * time.Second).
 		WithStartupTimeout(5 * time.Minute)
 
 	req := testcontainers.ContainerRequest{
-
 		Image: "venomuz/elastic_analysis-icu:9.0.4",
 		Name:  "elastic-mock" + uuid.NewString(),
 		Env: map[string]string{
-			"discovery.type":         "single-node",
-			"ES_JAVA_OPTS":           "-Xms512m -Xmx512m",
-			"xpack.security.enabled": "false",
+			"discovery.type":                  "single-node",
+			"ES_JAVA_OPTS":                    "-Xms512m -Xmx512m",
+			"xpack.security.enabled":          "false",
+			"xpack.security.http.ssl.enabled": "false",
 		},
 		ExposedPorts: []string{fmt.Sprintf("%d:%d/tcp", exposedPort, internalPort)},
 		//WaitingFor:   wait.ForLog("started"),

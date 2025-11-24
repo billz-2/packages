@@ -29,13 +29,16 @@ func SetupRedis(ctx context.Context, cfg Config) (
 		WithPollInterval(100 * time.Millisecond).
 		WithStartupTimeout(5 * time.Minute)
 
+	cmd := []string{"redis-server", "--protected-mode", "no"}
+	if cfg.RedisPassword != "" {
+		cmd = append(cmd, "--requirepass", cfg.RedisPassword)
+	}
+
 	req := testcontainers.ContainerRequest{
-		Image:        "bitnami/redis:latest",
+		Image:        "redis:latest",
 		ExposedPorts: []string{fmt.Sprintf("%d:%d/tcp", exposedPort, internalPort)},
-		Env: map[string]string{
-			"ALLOW_EMPTY_PASSWORD": "yes",
-		},
-		WaitingFor: ws,
+		Cmd:          cmd,
+		WaitingFor:   ws,
 	}
 	container, err = testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: req,
