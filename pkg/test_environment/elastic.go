@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/billz-2/packages/pkg/logger"
+
 	"github.com/docker/go-connections/nat"
 	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/testcontainers/testcontainers-go"
@@ -22,13 +24,16 @@ func SetupElastic(ctx context.Context, cfg Config) (esConfig elasticsearch.Confi
 
 	internalPort := "9200/tcp"
 
-	ws := wait.ForLog("started").
-		WithPollInterval(1 * time.Second).
-		WithStartupTimeout(5 * time.Minute)
+	ws := wait.ForHTTP("/_cluster/health").
+		WithPort(nat.Port(internalPort)).
+		WithStatusCodeMatcher(func(status int) bool {
+			return status >= 200 && status < 300
+		}).
+		WithPollInterval(2 * time.Second).
+		WithStartupTimeout(3 * time.Minute)
 
 	req := testcontainers.ContainerRequest{
-		Image: "venomuz/elastic_analysis-icu:9.0.4",
-		// Remove Name field to avoid conflicts
+		Image: "docker.elastic.co/elasticsearch/elasticsearch:8.11.0",
 		Env: map[string]string{
 			"discovery.type":                  "single-node",
 			"ES_JAVA_OPTS":                    "-Xms512m -Xmx512m",
@@ -37,7 +42,6 @@ func SetupElastic(ctx context.Context, cfg Config) (esConfig elasticsearch.Confi
 		},
 		ExposedPorts: []string{internalPort},
 		WaitingFor:   ws,
-		// Remove AutoRemove in test context to allow proper cleanup
 	}
 
 	elastic, err = testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
@@ -45,25 +49,30 @@ func SetupElastic(ctx context.Context, cfg Config) (esConfig elasticsearch.Confi
 		Started:          true,
 	})
 	if err != nil {
+		logger.Log.Error("Failed to create container", logger.Error(err))
 		return elasticsearch.Config{}, nil, fmt.Errorf("failed to create container: %w", err)
 	}
 
-	// Get the mapped port
+	time.Sleep(2 * time.Second)
+
 	mappedPort, err := elastic.MappedPort(ctx, nat.Port(internalPort))
 	if err != nil {
+		logger.Log.Error("Failed to get mapped port", logger.Error(err))
 		return elasticsearch.Config{}, nil, fmt.Errorf("failed to get mapped port: %w", err)
 	}
 
 	ip, err := elastic.Host(ctx)
 	if err != nil {
+		logger.Log.Error("Failed to get host", logger.Error(err))
 		return elasticsearch.Config{}, nil, fmt.Errorf("failed to get host: %w", err)
 	}
 
 	elasticAddress := fmt.Sprintf("http://%s:%s", ip, mappedPort.Port())
 
+	logger.Log.Info("Elasticsearch container started successfully",
+		logger.String("address", elasticAddress))
+
 	return elasticsearch.Config{
 		Addresses: []string{elasticAddress},
-		Username:  "elastic",
-		Password:  "elastic",
 	}, elastic, nil
 }
