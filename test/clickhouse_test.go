@@ -16,13 +16,14 @@ func TestClickHouseContainer(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	// Initialize the ClickHouse container
-	container, err := test_environment.SetupClickhouse(ctx, config)
+	network, err := test_environment.CreateDockerNetwork(ctx)
+	container, err := test_environment.SetupClickhouse(ctx, config, network)
 	if err != nil {
 		t.Fatalf("Failed to create ClickHouse container: %v", err)
 	}
 
 	require.NoError(t, err)
-	err = container.Close(ctx)
+	err = container.Stop(ctx)
 	cancel()
 	require.NoError(t, err)
 }

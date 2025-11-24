@@ -13,6 +13,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/testcontainers/testcontainers-go"
 	clickhouseModule "github.com/testcontainers/testcontainers-go/modules/clickhouse"
+	testContainersNetwork "github.com/testcontainers/testcontainers-go/network"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
@@ -32,7 +33,7 @@ const internalTCPClickhousePort = 9000
 const internalHttpClickhousePort = 8123
 
 // SetupClickhouse создает и запускает контейнер Clickhouse для тестов
-func SetupClickhouse(ctx context.Context, cfg Config) (*ClickhouseContainer, error) {
+func SetupClickhouse(ctx context.Context, cfg Config, network *testcontainers.DockerNetwork) (*ClickhouseContainer, error) {
 	// Настройки по умолчанию
 	exposedTCPPort, err := GetFreePort()
 	if err != nil {
@@ -51,6 +52,7 @@ func SetupClickhouse(ctx context.Context, cfg Config) (*ClickhouseContainer, err
 			ExposedPorts: []string{zkPort.Port()},
 			Image:        "zookeeper:3.8",
 			WaitingFor:   wait.ForListeningPort(zkPort),
+			Networks:     []string{network.Name},
 		},
 		Started: true,
 	})
@@ -83,6 +85,7 @@ func SetupClickhouse(ctx context.Context, cfg Config) (*ClickhouseContainer, err
 		),
 		clickhouseModule.WithZookeeper(ipaddr, zkPort.Port()),
 		clickhouseModule.WithConfigFile(cfgFile),
+		testContainersNetwork.WithNetwork([]string{network.Name}, network),
 	)
 
 	if err != nil {
@@ -165,7 +168,7 @@ func SetupClickhouse(ctx context.Context, cfg Config) (*ClickhouseContainer, err
 
 	if connectErr != nil {
 		initErr := fmt.Errorf("could not connect to ClickHouse after %d retries error: %w", maxRetries, connectErr)
-		err = result.Close(ctx) // Clean up resources if connection fails
+		err = result.Stop(ctx) // Clean up resources if connection fails
 		if err != nil {
 			return nil, errors.Wrap(err, initErr.Error())
 		}
@@ -176,8 +179,8 @@ func SetupClickhouse(ctx context.Context, cfg Config) (*ClickhouseContainer, err
 	return &result, nil
 }
 
-// Close останавливает и удаляет все контнейры для Clickhouse cluster
-func (c *ClickhouseContainer) Close(ctx context.Context) error {
+// Stop останавливает и удаляет все контнейры для Clickhouse cluster
+func (c *ClickhouseContainer) Stop(ctx context.Context) error {
 	if c.chContainer != nil {
 		containerState, err := c.chContainer.State(ctx)
 		if err != nil {
