@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/billz-2/packages/pkg/logger"
+	"github.com/docker/go-connections/nat"
 
 	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/testcontainers/testcontainers-go"
@@ -29,9 +30,7 @@ func SetupElastic(ctx context.Context, cfg Config) (esConfig elasticsearch.Confi
 
 	internalPort := 9200
 
-	ws := wait.ForLog("\"message\":\"started").
-		WithStartupTimeout(3 * time.Minute).
-		WithPollInterval(2 * time.Second)
+	ws := wait.ForListeningPort(nat.Port(fmt.Sprintf("%d/tcp", internalPort))).WithStartupTimeout(2 * time.Minute)
 
 	req := testcontainers.ContainerRequest{
 		Image: "venomuz/elastic_analysis-icu:9.0.4",
