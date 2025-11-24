@@ -33,7 +33,7 @@ func SetupElastic(ctx context.Context, cfg Config) (esConfig elasticsearch.Confi
 		WithStartupTimeout(3 * time.Minute)
 
 	req := testcontainers.ContainerRequest{
-		Image: "docker.elastic.co/elasticsearch/elasticsearch:8.11.0",
+		Image: "venomuz/elastic_analysis-icu:9.0.4",
 		Env: map[string]string{
 			"discovery.type":                  "single-node",
 			"ES_JAVA_OPTS":                    "-Xms512m -Xmx512m",
