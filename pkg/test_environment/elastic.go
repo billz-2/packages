@@ -6,10 +6,9 @@ import (
 	"time"
 
 	"github.com/billz-2/packages/pkg/logger"
-
 	"github.com/docker/go-connections/nat"
+
 	"github.com/elastic/go-elasticsearch/v8"
-	"github.com/google/uuid"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
@@ -30,24 +29,25 @@ func SetupElastic(ctx context.Context, cfg Config) (esConfig elasticsearch.Confi
 	}
 
 	internalPort := 9200
+
 	ws := wait.ForHTTP("/").
 		WithPort(nat.Port(fmt.Sprintf("%d/tcp", internalPort))).
-		WithPollInterval(100 * time.Millisecond).
+		WithPollInterval(2 * time.Second).
 		WithStartupTimeout(5 * time.Minute)
 
 	req := testcontainers.ContainerRequest{
-
-		Image: "docker.elastic.co/elasticsearch/elasticsearch:7.13.1",
-		Name:  "elastic-mock" + uuid.NewString(),
+		Image: "elasticsearch:9.0.4",
 		Env: map[string]string{
-			"discovery.type": "single-node",
-			"ES_JAVA_OPTS":   "-Xms512m -Xmx512m",
+			"discovery.type":                  "single-node",
+			"ES_JAVA_OPTS":                    "-Xms512m -Xmx512m",
+			"xpack.security.enabled":          "false",
+			"xpack.security.http.ssl.enabled": "false",
+			"http.host":                       "0.0.0.0",
 		},
 		ExposedPorts: []string{fmt.Sprintf("%d:%d/tcp", exposedPort, internalPort)},
-		//WaitingFor:   wait.ForLog("started"),
-		WaitingFor: ws,
-		AutoRemove: true,
+		WaitingFor:   ws,
 	}
+
 	elastic, err = testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: req,
 		Started:          true,
@@ -55,6 +55,27 @@ func SetupElastic(ctx context.Context, cfg Config) (esConfig elasticsearch.Confi
 	if err != nil {
 		return elasticsearch.Config{}, nil, err
 	}
+
+	logger.Log.Info("Installing analysis-icu plugin...")
+	exitCode, output, err := elastic.Exec(ctx, []string{"elasticsearch-plugin", "install", "analysis-icu"})
+	if err != nil || exitCode != 0 {
+		logger.Log.Error("Failed to install plugin", logger.Error(err), logger.Any("output", output))
+		return elasticsearch.Config{}, nil, fmt.Errorf("failed to install plugin: %v, output: %s", err, output)
+	}
+	logger.Log.Info("Plugin installed successfully")
+
+	logger.Log.Info("Restarting Elasticsearch...")
+	if err := elastic.Stop(ctx, nil); err != nil {
+		logger.Log.Error("Failed to stop container", logger.Error(err))
+		return elasticsearch.Config{}, nil, err
+	}
+
+	if err := elastic.Start(ctx); err != nil {
+		logger.Log.Error("Failed to start container", logger.Error(err))
+		return elasticsearch.Config{}, nil, err
+	}
+
+	logger.Log.Info("Waiting for Elasticsearch to be ready...")
 
 	ip, err := elastic.Host(ctx)
 	if err != nil {
