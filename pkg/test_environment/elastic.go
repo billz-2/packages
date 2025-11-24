@@ -30,7 +30,10 @@ func SetupElastic(ctx context.Context, cfg Config) (esConfig elasticsearch.Confi
 
 	internalPort := 9200
 
-	ws := wait.ForListeningPort(nat.Port(fmt.Sprintf("%d/tcp", internalPort))).WithStartupTimeout(2 * time.Minute)
+	ws := wait.ForHTTP("/").
+		WithPort(nat.Port(fmt.Sprintf("%d/tcp", internalPort))).
+		WithPollInterval(2 * time.Second).
+		WithStartupTimeout(5 * time.Minute)
 
 	req := testcontainers.ContainerRequest{
 		Image: "venomuz/elastic_analysis-icu:9.0.4",
@@ -42,9 +45,7 @@ func SetupElastic(ctx context.Context, cfg Config) (esConfig elasticsearch.Confi
 			"http.host":                       "0.0.0.0",
 		},
 		ExposedPorts: []string{fmt.Sprintf("%d:%d/tcp", exposedPort, internalPort)},
-		//WaitingFor:   wait.ForLog("started"),
-		WaitingFor: ws,
-		AutoRemove: true,
+		WaitingFor:   ws,
 	}
 
 	elastic, err = testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
