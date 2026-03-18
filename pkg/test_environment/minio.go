@@ -15,7 +15,7 @@ func SetupMinio(ctx context.Context, cfg Config) (
 	container testcontainers.Container, uri string, err error,
 ) {
 	if cfg.Environment == "local" {
-		return nil, fmt.Sprintf("minio://%s", cfg.MinioEndpoint), nil
+		return nil, cfg.MinioEndpoint, nil
 	}
 
 	exposedPort, err := GetFreePort()
