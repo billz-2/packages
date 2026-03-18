@@ -16,4 +16,7 @@ type Config struct {
 	ClickHouseUser        string
 	ClickHousePassword    string
 	ClickHouseDatabase    string
+	MinioEndpoint         string
+	MinioAccessKey        string
+	MinioSecretKey        string
 }
