@@ -3,6 +3,7 @@ package test_environment
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/billz-2/packages/pkg/logger"
@@ -25,9 +26,19 @@ func SetupMinio(ctx context.Context, cfg Config) (
 	}
 
 	internalPort := 9000
-	ws := wait.NewHostPortStrategy(nat.Port(fmt.Sprintf("%d/tcp", internalPort))).
-		WithPollInterval(100 * time.Millisecond).
-		WithStartupTimeout(5 * time.Minute)
+	port := nat.Port(fmt.Sprintf("%d/tcp", internalPort))
+	ws := wait.ForAll(
+		wait.NewHostPortStrategy(port).
+			WithPollInterval(100*time.Millisecond).
+			WithStartupTimeout(5*time.Minute),
+		wait.ForHTTP("/minio/health/ready").
+			WithPort(port).
+			WithStatusCodeMatcher(func(code int) bool {
+				return code == http.StatusOK
+			}).
+			WithPollInterval(250*time.Millisecond).
+			WithStartupTimeout(5*time.Minute),
+	)
 
 	cmd := []string{"server", "/data"}
 	req := testcontainers.ContainerRequest{
