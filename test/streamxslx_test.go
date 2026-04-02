@@ -168,16 +168,18 @@ func (m *mockMinioClient) PresignedGetObject(ctx context.Context, bucketName, ob
 // Мок для логгера
 type mockLogger struct{}
 
-func (m mockLogger) Debug(msg string, fields ...logger.Field)                             {}
-func (m mockLogger) Info(msg string, fields ...logger.Field)                              {}
-func (m mockLogger) Warn(msg string, fields ...logger.Field)                              {}
-func (m mockLogger) Error(msg string, fields ...logger.Field)                             {}
-func (m mockLogger) Fatal(msg string, fields ...logger.Field)                             {}
-func (m mockLogger) DebugWithCtx(ctx context.Context, msg string, fields ...logger.Field) {}
-func (m mockLogger) InfoWithCtx(ctx context.Context, msg string, fields ...logger.Field)  {}
-func (m mockLogger) WarnWithCtx(ctx context.Context, msg string, fields ...logger.Field)  {}
-func (m mockLogger) ErrorWithCtx(ctx context.Context, msg string, fields ...logger.Field) {}
-func (m mockLogger) FatalWithCtx(ctx context.Context, msg string, fields ...logger.Field) {}
+func (m mockLogger) Debug(msg string, fields ...logger.Field)                                     {}
+func (m mockLogger) Info(msg string, fields ...logger.Field)                                      {}
+func (m mockLogger) Warn(msg string, fields ...logger.Field)                                      {}
+func (m mockLogger) Error(msg string, fields ...logger.Field)                                     {}
+func (m mockLogger) Fatal(msg string, fields ...logger.Field)                                     {}
+func (m mockLogger) DebugWithCtx(ctx context.Context, msg string, fields ...logger.Field)         {}
+func (m mockLogger) InfoWithCtx(ctx context.Context, msg string, fields ...logger.Field)          {}
+func (m mockLogger) WarnWithCtx(ctx context.Context, msg string, fields ...logger.Field)          {}
+func (m mockLogger) ErrorWithCtx(ctx context.Context, msg string, fields ...logger.Field)         {}
+func (m mockLogger) FatalWithCtx(ctx context.Context, msg string, fields ...logger.Field)         {}
+func (m mockLogger) ErrorWithCtxAndStack(ctx context.Context, msg string, fields ...logger.Field) {}
+func (m mockLogger) ErrorWithStack(msg string, fields ...logger.Field)                            {}
 
 func init() {
 	go func() {

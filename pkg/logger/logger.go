@@ -33,6 +33,7 @@ var (
 	Float64  = zap.Float64
 	Float32  = zap.Float32
 	Any      = zap.Any
+	Stack    = zap.Stack
 )
 
 // Logger ...
@@ -48,6 +49,9 @@ type Logger interface {
 	WarnWithCtx(ctx context.Context, msg string, fields ...Field)
 	ErrorWithCtx(ctx context.Context, msg string, fields ...Field)
 	FatalWithCtx(ctx context.Context, msg string, fields ...Field)
+
+	ErrorWithStack(msg string, fields ...Field)
+	ErrorWithCtxAndStack(ctx context.Context, msg string, fields ...Field)
 }
 
 type loggerImpl struct {
@@ -118,6 +122,16 @@ func (l *loggerImpl) ErrorWithCtx(ctx context.Context, msg string, fields ...Fie
 
 func (l *loggerImpl) FatalWithCtx(ctx context.Context, msg string, fields ...Field) {
 	l.log(ctx, LevelFatal, msg, fields...)
+}
+
+func (l *loggerImpl) ErrorWithStack(msg string, fields ...Field) {
+	fields = append(fields, zap.Stack("stacktrace"))
+	l.zap.Error(msg, fields...)
+}
+
+func (l *loggerImpl) ErrorWithCtxAndStack(ctx context.Context, msg string, fields ...Field) {
+	fields = append(fields, zap.Stack("stacktrace"))
+	l.log(ctx, LevelError, msg, fields...)
 }
 
 func (l *loggerImpl) log(ctx context.Context, level LogLevel, message string, fields ...Field) {
