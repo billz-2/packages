@@ -75,7 +75,7 @@ func SetupClickhouse(ctx context.Context, cfg Config, network *testcontainers.Do
 	}()
 
 	clickHouseContainer, err := clickhouseModule.Run(ctx,
-		"clickhouse/clickhouse-server:22.8.1.2097-alpine",
+		"clickhouse/clickhouse-server:24.2.2-alpine",
 		clickhouseModule.WithUsername(cfg.ClickHouseUser),
 		clickhouseModule.WithPassword(cfg.ClickHousePassword),
 		clickhouseModule.WithDatabase(cfg.ClickHouseDatabase),

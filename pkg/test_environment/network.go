@@ -2,6 +2,8 @@ package test_environment
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	dockerNetwork "github.com/docker/docker/api/types/network"
 	"github.com/pkg/errors"
@@ -10,6 +12,7 @@ import (
 )
 
 func CreateDockerNetwork(ctx context.Context) (*testcontainers.DockerNetwork, error) {
+	networkName := fmt.Sprintf("test-network-%d", time.Now().UnixNano())
 	ipamConfig := dockerNetwork.IPAM{
 		Driver: "default",
 		Config: []dockerNetwork.IPAMConfig{
@@ -26,6 +29,7 @@ func CreateDockerNetwork(ctx context.Context) (*testcontainers.DockerNetwork, er
 		network.WithIPAM(&ipamConfig),
 		network.WithAttachable(),
 		network.WithDriver("bridge"),
+		network.WithLabels(map[string]string{"name": networkName}),
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create network")

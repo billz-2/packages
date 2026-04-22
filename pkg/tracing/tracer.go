@@ -1,9 +1,11 @@
 package tracing
 
 import (
+	"context"
+
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/jaeger"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
@@ -28,10 +30,17 @@ func init() {
 	_, _ = NewTraceProvider(&Config{})
 }
 
-func newExporter(jaegerConfig *Config) (*jaeger.Exporter, error) {
-	exporter, err := jaeger.New(jaeger.WithCollectorEndpoint(jaeger.WithEndpoint(jaegerConfig.JaegerUrl)))
+func newExporter(jaegerConfig *Config) (sdktrace.SpanExporter, error) {
+	opts := []otlptracehttp.Option{}
+
+	if jaegerConfig.JaegerUrl != "" {
+		opts = append(opts, otlptracehttp.WithEndpoint(jaegerConfig.JaegerUrl))
+		opts = append(opts, otlptracehttp.WithInsecure()) // для совместимости с локальными Jaeger
+	}
+
+	exporter, err := otlptracehttp.New(context.Background(), opts...)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create the Jaeger exporter")
+		return nil, errors.Wrap(err, "failed to create the OTLP exporter")
 	}
 
 	return exporter, nil
