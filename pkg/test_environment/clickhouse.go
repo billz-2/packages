@@ -75,7 +75,7 @@ func SetupClickhouse(ctx context.Context, cfg Config, network *testcontainers.Do
 	}()
 
 	clickHouseContainer, err := clickhouseModule.Run(ctx,
-		"clickhouse/clickhouse-server:22.8.1.2097-alpine",
+		"clickhouse/clickhouse-server:24.2.2-alpine",
 		clickhouseModule.WithUsername(cfg.ClickHouseUser),
 		clickhouseModule.WithPassword(cfg.ClickHousePassword),
 		clickhouseModule.WithDatabase(cfg.ClickHouseDatabase),
@@ -144,6 +144,7 @@ func SetupClickhouse(ctx context.Context, cfg Config, network *testcontainers.Do
 		})
 
 		connectErr = clickhouseConn.Ping()
+		_ = clickhouseConn.Close()
 		if connectErr == nil {
 			// Успешное подключение
 			break
@@ -195,6 +196,17 @@ func (c *ClickhouseContainer) Stop(ctx context.Context) error {
 		if err != nil {
 			return errors.Wrap(err, "can't stop clickhouse")
 		}
+
+		// Ожидаем полной остановки ClickHouse контейнера
+		maxRetries := 10
+		for i := 0; i < maxRetries; i++ {
+			var state *container.State
+			state, err = c.chContainer.State(ctx)
+			if err != nil || !state.Running {
+				break
+			}
+			time.Sleep(500 * time.Millisecond)
+		}
 	}
 
 	if c.zooKeeper != nil {
@@ -210,6 +222,17 @@ func (c *ClickhouseContainer) Stop(ctx context.Context) error {
 		err = c.zooKeeper.Terminate(ctx, testcontainers.RemoveVolumes())
 		if err != nil {
 			return errors.Wrap(err, "can't stop ZooKeeper")
+		}
+
+		// Ожидаем полной остановки ZooKeeper контейнера
+		maxRetries := 10
+		for i := 0; i < maxRetries; i++ {
+			var state *container.State
+			state, err = c.zooKeeper.State(ctx)
+			if err != nil || !state.Running {
+				break
+			}
+			time.Sleep(500 * time.Millisecond)
 		}
 	}
 

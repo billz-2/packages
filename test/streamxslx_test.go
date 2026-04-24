@@ -178,8 +178,8 @@ func (m mockLogger) InfoWithCtx(ctx context.Context, msg string, fields ...logge
 func (m mockLogger) WarnWithCtx(ctx context.Context, msg string, fields ...logger.Field)          {}
 func (m mockLogger) ErrorWithCtx(ctx context.Context, msg string, fields ...logger.Field)         {}
 func (m mockLogger) FatalWithCtx(ctx context.Context, msg string, fields ...logger.Field)         {}
-func (m mockLogger) ErrorWithCtxAndStack(ctx context.Context, msg string, fields ...logger.Field) {}
 func (m mockLogger) ErrorWithStack(msg string, fields ...logger.Field)                            {}
+func (m mockLogger) ErrorWithCtxAndStack(ctx context.Context, msg string, fields ...logger.Field) {}
 
 func init() {
 	go func() {
