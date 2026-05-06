@@ -3,6 +3,7 @@ package test_environment
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/billz-2/packages/pkg/logger"
@@ -12,6 +13,25 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
+
+// EnvElasticsearchImage is the name of the environment variable that
+// callers may set to override the default Elasticsearch image used by
+// SetupElastic. This is useful when a service needs an image with extra
+// plugins installed (e.g. analysis-icu), but does not want to fork the
+// whole pkg/test_environment.
+const EnvElasticsearchImage = "TEST_ELASTICSEARCH_IMAGE"
+
+// defaultElasticsearchImage is the image used when EnvElasticsearchImage
+// is not set. Keep it in sync with the Elasticsearch version the package
+// has historically targeted, so existing callers don't change behavior.
+const defaultElasticsearchImage = "docker.elastic.co/elasticsearch/elasticsearch:9.0.4"
+
+func elasticsearchImage() string {
+	if v := os.Getenv(EnvElasticsearchImage); v != "" {
+		return v
+	}
+	return defaultElasticsearchImage
+}
 
 func SetupElastic(ctx context.Context, cfg Config) (esConfig elasticsearch.Config, elastic testcontainers.Container, err error) {
 	if cfg.Environment == "local" {
@@ -36,7 +56,7 @@ func SetupElastic(ctx context.Context, cfg Config) (esConfig elasticsearch.Confi
 		WithStartupTimeout(5 * time.Minute)
 
 	req := testcontainers.ContainerRequest{
-		Image: "elasticsearch:9.0.4",
+		Image: elasticsearchImage(),
 		Env: map[string]string{
 			"discovery.type":                  "single-node",
 			"ES_JAVA_OPTS":                    "-Xms512m -Xmx512m",
