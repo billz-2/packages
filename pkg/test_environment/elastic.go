@@ -76,26 +76,7 @@ func SetupElastic(ctx context.Context, cfg Config) (esConfig elasticsearch.Confi
 		return elasticsearch.Config{}, nil, err
 	}
 
-	logger.Log.Info("Installing analysis-icu plugin...")
-	exitCode, output, err := elastic.Exec(ctx, []string{"elasticsearch-plugin", "install", "analysis-icu"})
-	if err != nil || exitCode != 0 {
-		logger.Log.Error("Failed to install plugin", logger.Error(err), logger.Any("output", output))
-		return elasticsearch.Config{}, nil, fmt.Errorf("failed to install plugin: %v, output: %s", err, output)
-	}
-	logger.Log.Info("Plugin installed successfully")
-
-	logger.Log.Info("Restarting Elasticsearch...")
-	if err := elastic.Stop(ctx, nil); err != nil {
-		logger.Log.Error("Failed to stop container", logger.Error(err))
-		return elasticsearch.Config{}, nil, err
-	}
-
-	if err := elastic.Start(ctx); err != nil {
-		logger.Log.Error("Failed to start container", logger.Error(err))
-		return elasticsearch.Config{}, nil, err
-	}
-
-	logger.Log.Info("Waiting for Elasticsearch to be ready...")
+	logger.Log.Info("Skipping analysis-icu install: bundled as a module since ES 8.13")
 
 	ip, err := elastic.Host(ctx)
 	if err != nil {
