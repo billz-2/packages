@@ -47,26 +47,17 @@ func (c *client) GetUsersByIDs(ctx context.Context, userIDs []string) (map[strin
 		return result, nil
 	}
 
-	fetched, failed, firstErr := c.fetchMany(ctx, misses)
+	fetched, err := c.fetchMany(ctx, misses)
+	if err != nil {
+		// Всё или ничего. Неполный результат вызывающий не отличит от полного:
+		// отсутствующий id читается как "такого пользователя нет", хотя на деле его
+		// просто не удалось спросить. Пусть решает сам - повторить или взять дефолт
+		// на всю пачку.
+		return nil, err
+	}
+
 	for id, user := range fetched {
 		result[id] = user
-	}
-
-	// Ошибка только если не удалось получить вообще никого: частичный результат
-	// полезнее отказа - остальные получатели не должны страдать из-за одного.
-	if len(result) == 0 && firstErr != nil {
-		return nil, firstErr
-	}
-
-	// Частичный сбой отдаётся как успех, поэтому обязан быть виден в логах: иначе
-	// недоступность User Service для части получателей исчезает бесследно - вызывающий
-	// видит только map, в котором кого-то нет, и не отличит "не найден" от "не смогли спросить".
-	if firstErr != nil {
-		c.logger.WarnWithCtx(ctx, "userclient: partial batch failure, some users are missing from the result",
-			logger.Int("requested", len(ids)),
-			logger.Int("resolved", len(result)),
-			logger.Int("failed", failed),
-			logger.Error(firstErr))
 	}
 
 	return result, nil
@@ -147,13 +138,12 @@ func (c *client) getManyFromCache(ctx context.Context, ids []string, dst map[str
 
 // fetchMany дозапрашивает промахи в User Service с ограниченным параллелизмом.
 // ErrUserNotFound ошибкой не считается - такого пользователя просто нет в результате.
-// Возвращает найденных, число реальных сбоев и первую их ошибку.
-func (c *client) fetchMany(ctx context.Context, ids []string) (map[string]*User, int, error) {
+// Любой другой сбой возвращается: неполная пачка молча врёт вызывающему.
+func (c *client) fetchMany(ctx context.Context, ids []string) (map[string]*User, error) {
 	var (
 		mu       sync.Mutex
 		wg       sync.WaitGroup
 		fetched  = make(map[string]*User, len(ids))
-		failed   int
 		firstErr error
 	)
 
@@ -182,18 +172,19 @@ func (c *client) fetchMany(ctx context.Context, ids []string) (map[string]*User,
 			case err == nil:
 				fetched[id] = user
 			case errors.Is(err, ErrUserNotFound):
-			default:
-				failed++
-				if firstErr == nil {
-					firstErr = err
-				}
+			case firstErr == nil:
+				firstErr = err
 			}
 		}(id)
 	}
 
 	wg.Wait()
 
-	return fetched, failed, firstErr
+	if firstErr != nil {
+		return nil, firstErr
+	}
+
+	return fetched, nil
 }
 
 // getFromUserService - GET {baseURL}/v1/user/{id}. Ответ - неконвертированный models.User,

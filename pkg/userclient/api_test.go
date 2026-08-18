@@ -355,12 +355,12 @@ func TestGetUsersByIDs_AllFail_ReturnsError(t *testing.T) {
 	users, err := cl.GetUsersByIDs(context.Background(), []string{userID, otherUserID})
 
 	require.Error(t, err)
+	require.NotErrorIs(t, err, userclient.ErrUserNotFound)
 	require.Nil(t, users)
 }
 
-func TestGetUsersByIDs_PartialFailure_ReturnsWhatItGot(t *testing.T) {
-	log := &testLogger{}
-
+// Всё или ничего: один сбойный получатель валит весь вызов, частичной пачки не бывает.
+func TestGetUsersByIDs_PartialFailure_ReturnsError(t *testing.T) {
 	svc := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/user/"+userID {
 			w.Header().Set("Content-Type", "application/json")
@@ -371,21 +371,36 @@ func TestGetUsersByIDs_PartialFailure_ReturnsWhatItGot(t *testing.T) {
 	}))
 	t.Cleanup(svc.Close)
 
-	cl := newClient(t, userclient.Config{UserServiceURL: svc.URL, Redis: newFakeRedis(t), Logger: log})
+	cl := newClient(t, userclient.Config{UserServiceURL: svc.URL, Redis: newFakeRedis(t)})
 
 	users, err := cl.GetUsersByIDs(context.Background(), []string{userID, otherUserID})
 
-	require.NoError(t, err, "one broken recipient must not sink the whole batch")
-	require.Len(t, users, 1)
-	require.Equal(t, "uz", users[userID].Language)
-
-	// Частичный сбой отдаётся как успех - значит, единственный его след это лог.
-	require.Len(t, log.warnings(), 1)
-	require.Contains(t, log.warnings()[0], "partial batch failure")
+	require.Error(t, err)
+	require.NotErrorIs(t, err, userclient.ErrUserNotFound)
+	require.Contains(t, err.Error(), "500")
+	require.Nil(t, users, "no partial result: an incomplete map is indistinguishable from a complete one")
 }
 
-// Частичный сбой из-за 404 логом не считается: пользователя просто нет, это не сбой.
-func TestGetUsersByIDs_PartialNotFound_DoesNotWarn(t *testing.T) {
+// Даже когда всё остальное уже лежит в кеше - сбой одного дозапроса валит вызов.
+func TestGetUsersByIDs_CacheHitPlusFailedMiss_ReturnsError(t *testing.T) {
+	rdb := newFakeRedis(t)
+	rdb.values[userServiceCacheKey(userID)] = cachedUser(t, userID, "uz")
+
+	svc := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(svc.Close)
+
+	cl := newClient(t, userclient.Config{UserServiceURL: svc.URL, Redis: rdb})
+
+	users, err := cl.GetUsersByIDs(context.Background(), []string{userID, otherUserID})
+
+	require.Error(t, err)
+	require.Nil(t, users, "a cache hit must not leak out as a partial result")
+}
+
+// 404 сбоем не считается: пользователя просто нет, остальных отдаём.
+func TestGetUsersByIDs_PartialNotFound_IsNotAnError(t *testing.T) {
 	log := &testLogger{}
 
 	svc := newFakeUserService(t, map[string]userclient.User{
@@ -398,6 +413,7 @@ func TestGetUsersByIDs_PartialNotFound_DoesNotWarn(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, users, 1)
+	require.Equal(t, "uz", users[userID].Language)
 	require.Empty(t, log.warnings())
 }
 

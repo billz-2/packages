@@ -50,8 +50,9 @@ type Client interface {
 	GetUserByID(ctx context.Context, userID string) (*User, error)
 
 	// GetUsersByIDs возвращает пользователей по набору id одним MGET и параллельными
-	// запросами в User Service только для промахов. Отсутствующие пользователи в
-	// результат не попадают; ошибка возвращается только если не удалось получить ни одного.
+	// запросами в User Service только для промахов. Всё или ничего: любой сбой запроса
+	// возвращается ошибкой, частичного результата не бывает. Ненайденные (404) сбоем не
+	// считаются - таких id в map просто нет.
 	GetUsersByIDs(ctx context.Context, userIDs []string) (map[string]*User, error)
 }
 
