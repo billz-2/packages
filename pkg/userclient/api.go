@@ -47,7 +47,7 @@ func (c *client) GetUsersByIDs(ctx context.Context, userIDs []string) (map[strin
 		return result, nil
 	}
 
-	fetched, firstErr := c.fetchMany(ctx, misses)
+	fetched, failed, firstErr := c.fetchMany(ctx, misses)
 	for id, user := range fetched {
 		result[id] = user
 	}
@@ -56,6 +56,17 @@ func (c *client) GetUsersByIDs(ctx context.Context, userIDs []string) (map[strin
 	// полезнее отказа - остальные получатели не должны страдать из-за одного.
 	if len(result) == 0 && firstErr != nil {
 		return nil, firstErr
+	}
+
+	// Частичный сбой отдаётся как успех, поэтому обязан быть виден в логах: иначе
+	// недоступность User Service для части получателей исчезает бесследно - вызывающий
+	// видит только map, в котором кого-то нет, и не отличит "не найден" от "не смогли спросить".
+	if firstErr != nil {
+		c.logger.WarnWithCtx(ctx, "userclient: partial batch failure, some users are missing from the result",
+			logger.Int("requested", len(ids)),
+			logger.Int("resolved", len(result)),
+			logger.Int("failed", failed),
+			logger.Error(firstErr))
 	}
 
 	return result, nil
@@ -136,11 +147,13 @@ func (c *client) getManyFromCache(ctx context.Context, ids []string, dst map[str
 
 // fetchMany дозапрашивает промахи в User Service с ограниченным параллелизмом.
 // ErrUserNotFound ошибкой не считается - такого пользователя просто нет в результате.
-func (c *client) fetchMany(ctx context.Context, ids []string) (map[string]*User, error) {
+// Возвращает найденных, число реальных сбоев и первую их ошибку.
+func (c *client) fetchMany(ctx context.Context, ids []string) (map[string]*User, int, error) {
 	var (
 		mu       sync.Mutex
 		wg       sync.WaitGroup
 		fetched  = make(map[string]*User, len(ids))
+		failed   int
 		firstErr error
 	)
 
@@ -169,15 +182,18 @@ func (c *client) fetchMany(ctx context.Context, ids []string) (map[string]*User,
 			case err == nil:
 				fetched[id] = user
 			case errors.Is(err, ErrUserNotFound):
-			case firstErr == nil:
-				firstErr = err
+			default:
+				failed++
+				if firstErr == nil {
+					firstErr = err
+				}
 			}
 		}(id)
 	}
 
 	wg.Wait()
 
-	return fetched, firstErr
+	return fetched, failed, firstErr
 }
 
 // getFromUserService - GET {baseURL}/v1/user/{id}. Ответ - неконвертированный models.User,

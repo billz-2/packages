@@ -359,6 +359,8 @@ func TestGetUsersByIDs_AllFail_ReturnsError(t *testing.T) {
 }
 
 func TestGetUsersByIDs_PartialFailure_ReturnsWhatItGot(t *testing.T) {
+	log := &testLogger{}
+
 	svc := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/user/"+userID {
 			w.Header().Set("Content-Type", "application/json")
@@ -369,13 +371,34 @@ func TestGetUsersByIDs_PartialFailure_ReturnsWhatItGot(t *testing.T) {
 	}))
 	t.Cleanup(svc.Close)
 
-	cl := newClient(t, userclient.Config{UserServiceURL: svc.URL, Redis: newFakeRedis(t)})
+	cl := newClient(t, userclient.Config{UserServiceURL: svc.URL, Redis: newFakeRedis(t), Logger: log})
 
 	users, err := cl.GetUsersByIDs(context.Background(), []string{userID, otherUserID})
 
 	require.NoError(t, err, "one broken recipient must not sink the whole batch")
 	require.Len(t, users, 1)
 	require.Equal(t, "uz", users[userID].Language)
+
+	// Частичный сбой отдаётся как успех - значит, единственный его след это лог.
+	require.Len(t, log.warnings(), 1)
+	require.Contains(t, log.warnings()[0], "partial batch failure")
+}
+
+// Частичный сбой из-за 404 логом не считается: пользователя просто нет, это не сбой.
+func TestGetUsersByIDs_PartialNotFound_DoesNotWarn(t *testing.T) {
+	log := &testLogger{}
+
+	svc := newFakeUserService(t, map[string]userclient.User{
+		userID: {ID: userID, Language: "uz"},
+	})
+
+	cl := newClient(t, userclient.Config{UserServiceURL: svc.URL, Redis: newFakeRedis(t), Logger: log})
+
+	users, err := cl.GetUsersByIDs(context.Background(), []string{userID, otherUserID})
+
+	require.NoError(t, err)
+	require.Len(t, users, 1)
+	require.Empty(t, log.warnings())
 }
 
 func TestGetUsersByIDs_EmptyInput(t *testing.T) {
