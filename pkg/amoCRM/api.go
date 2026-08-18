@@ -48,7 +48,7 @@ type api struct {
 	logger logger.Logger
 }
 
-func newAPI(clientID, clientSecret, token, redirectURL string, logger logger.Logger) *api {
+func newAPI(clientID, clientSecret, token, redirectURL, domain string, logger logger.Logger) *api {
 	return &api{
 		clientID:     clientID,
 		clientSecret: clientSecret,
@@ -58,6 +58,7 @@ func newAPI(clientID, clientSecret, token, redirectURL string, logger logger.Log
 		},
 		logger: logger,
 		token:  token,
+		domain: domain,
 	}
 }
 
@@ -134,7 +135,7 @@ func (a *api) url(path string, q url.Values) (*url.URL, error) {
 		return nil, amoCrmApiErrWrap("invalid accounts domain")
 	}
 
-	endpointURL := "https://" + a.domain + path + "?" + q.Encode()
+	endpointURL := a.domain + path + "?" + q.Encode()
 
 	return url.Parse(endpointURL)
 }
@@ -157,6 +158,13 @@ func isValidDomain(domain string) bool {
 	if domain == "" {
 		return false
 	}
+
+	// Remove protocol prefix if present
+	domain = strings.TrimPrefix(domain, "http://")
+	domain = strings.TrimPrefix(domain, "https://")
+
+	// Remove trailing slash if present
+	domain = strings.TrimSuffix(domain, "/")
 
 	parts := strings.Split(domain, ".")
 	if len(parts) != 3 ||

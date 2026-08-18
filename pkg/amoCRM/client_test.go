@@ -13,17 +13,18 @@ var (
 	clientSecret = "client_secret"
 	token        = "test_token"
 	redirectURL  = "redirect_url"
+	domain       = "domain"
 )
 
 func TestNew(t *testing.T) {
 	testLogger := logger.New(logger.LevelDebug, "test")
-	cl := amocrm.New(clientID, clientSecret, token, redirectURL, testLogger)
+	cl := amocrm.New(clientID, clientSecret, token, redirectURL, domain, testLogger)
 	require.Implements(t, (*amocrm.Client)(nil), cl)
 }
 
 func TestAmoCRM_Leads(t *testing.T) {
 	testLogger := logger.New(logger.LevelDebug, "test")
-	cl := amocrm.New(clientID, clientSecret, token, redirectURL, testLogger)
+	cl := amocrm.New(clientID, clientSecret, token, redirectURL, domain, testLogger)
 
 	leads := cl.Leads()
 	require.NotNil(t, leads)
