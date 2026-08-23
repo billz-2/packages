@@ -128,7 +128,7 @@ services:
       - "4318:4318" # http
 
   prometheus:
-    image: prom/prometheus:v3.0.0
+    image: prom/prometheus:v3.14.0
     ports:
       - "9090:9090"
 
