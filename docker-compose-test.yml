@@ -13,7 +13,7 @@ services:
   # https://stackoverflow.com/questions/46627979/what-is-the-default-user-and-password-for-elasticsearch
   # https://www.elastic.co/guide/en/x-pack/current/security-getting-started.html
   elasticsearch:
-    image: elasticsearch:7.13.1
+    image: elasticsearch:7.17.28
     container_name: elasticsearch
     environment:
       - discovery.type=single-node
