@@ -42,7 +42,7 @@ func SetupMinio(ctx context.Context, cfg Config) (
 
 	cmd := []string{"server", "/data"}
 	req := testcontainers.ContainerRequest{
-		Image:        "minio/minio:RELEASE.2025-07-18T21-56-31Z",
+		Image:        "sourcemation/minio:RELEASE.2025-10-15T17-29-55Z-20260905",
 		ExposedPorts: []string{fmt.Sprintf("%d:%d/tcp", exposedPort, internalPort)},
 		Env: map[string]string{
 			"MINIO_ACCESS_KEY": cfg.MinioAccessKey,
