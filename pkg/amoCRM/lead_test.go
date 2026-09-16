@@ -14,7 +14,7 @@ var ctx = context.Background()
 func TestBatchUpdateEmptySlice(t *testing.T) {
 	// Create a client
 	testLogger := logger.New(logger.LevelDebug, "test")
-	cl := amocrm.New(clientID, clientSecret, token, redirectURL, testLogger)
+	cl := amocrm.New(clientID, clientSecret, token, redirectURL, domain, testLogger)
 
 	// Call BatchUpdate with empty slice
 	err := cl.Leads().BatchUpdate(ctx, []*amocrm.LeadUpdate{})
@@ -24,7 +24,7 @@ func TestBatchUpdateEmptySlice(t *testing.T) {
 func TestUpdateNilLead(t *testing.T) {
 	// Create a client
 	testLogger := logger.New(logger.LevelDebug, "test")
-	cl := amocrm.New(clientID, clientSecret, token, redirectURL, testLogger)
+	cl := amocrm.New(clientID, clientSecret, token, redirectURL, domain, testLogger)
 
 	// Call Update with nil lead
 	err := cl.Leads().Update(ctx, nil)
@@ -34,7 +34,7 @@ func TestUpdateNilLead(t *testing.T) {
 
 func TestLeadUpdateWithValidData(t *testing.T) {
 	testLogger := logger.New(logger.LevelDebug, "test-lead-update")
-	cl := amocrm.New(clientID, clientSecret, token, redirectURL, testLogger)
+	cl := amocrm.New(clientID, clientSecret, token, redirectURL, domain, testLogger)
 
 	// Create test lead with valid data
 	name := "Test Lead"
@@ -50,7 +50,7 @@ func TestLeadUpdateWithValidData(t *testing.T) {
 
 func TestBatchUpdateLogging(t *testing.T) {
 	testLogger := logger.New(logger.LevelDebug, "test-batch-logging")
-	cl := amocrm.New(clientID, clientSecret, token, redirectURL, testLogger)
+	cl := amocrm.New(clientID, clientSecret, token, redirectURL, domain, testLogger)
 
 	// Test with some leads - should log debug messages about the operation
 	name1 := "Test Lead 1"
