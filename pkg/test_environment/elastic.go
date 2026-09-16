@@ -34,7 +34,7 @@ const defaultElasticsearchImage = "docker.elastic.co/elasticsearch/elasticsearch
 // supplied. It bakes the analysis-icu plugin into the default image so it is
 // available without any runtime installation.
 const elasticsearchDockerfile = "FROM " + defaultElasticsearchImage + "\n" +
-	"RUN elasticsearch-plugin install --batch analysis-icu\n"
+	"RUN CLI_JAVA_OPTS=\"-Xms256m -Xmx256m\" elasticsearch-plugin install --batch analysis-icu\n"
 
 // elasticsearchBuildContext returns a tar archive containing the inline
 // Dockerfile above, suitable for testcontainers' FromDockerfile.ContextArchive.
@@ -107,6 +107,8 @@ func SetupElastic(ctx context.Context, cfg Config) (esConfig elasticsearch.Confi
 		req.FromDockerfile = testcontainers.FromDockerfile{
 			ContextArchive: elasticsearchBuildContext(),
 			// keep the built image so it is reused across runs
+			Repo:      "billz-test/elasticsearch-icu",
+			Tag:       "9.0.4",
 			KeepImage: true,
 		}
 	}
