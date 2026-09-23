@@ -48,7 +48,7 @@ type api struct {
 	logger logger.Logger
 }
 
-func newAPI(clientID, clientSecret, token, redirectURL string, logger logger.Logger) *api {
+func newAPI(clientID, clientSecret, token, redirectURL, domain string, logger logger.Logger) *api {
 	return &api{
 		clientID:     clientID,
 		clientSecret: clientSecret,
@@ -58,6 +58,7 @@ func newAPI(clientID, clientSecret, token, redirectURL string, logger logger.Log
 		},
 		logger: logger,
 		token:  token,
+		domain: normalizeDomain(domain),
 	}
 }
 
@@ -134,9 +135,12 @@ func (a *api) url(path string, q url.Values) (*url.URL, error) {
 		return nil, amoCrmApiErrWrap("invalid accounts domain")
 	}
 
-	endpointURL := "https://" + a.domain + path + "?" + q.Encode()
-
-	return url.Parse(endpointURL)
+	return &url.URL{
+		Scheme:   "https",
+		Host:     a.domain,
+		Path:     path,
+		RawQuery: q.Encode(),
+	}, nil
 }
 
 func (a *api) header() http.Header {
@@ -153,6 +157,16 @@ func (a *api) baseHeader() http.Header {
 	}
 }
 
+func normalizeDomain(domain string) string {
+	domain = strings.ToLower(strings.TrimSpace(domain))
+	if strings.HasPrefix(domain, "https://") {
+		domain = strings.TrimPrefix(domain, "https://")
+	} else {
+		domain = strings.TrimPrefix(domain, "http://")
+	}
+	return strings.TrimRight(domain, "/")
+}
+
 func isValidDomain(domain string) bool {
 	if domain == "" {
 		return false
@@ -163,9 +177,17 @@ func isValidDomain(domain string) bool {
 		parts[0] == "" ||
 		parts[0] == "www" ||
 		len(parts[0]) > 63 ||
+		strings.HasPrefix(parts[0], "-") ||
+		strings.HasSuffix(parts[0], "-") ||
 		parts[1] != "amocrm" ||
 		parts[2] != "ru" && parts[2] != "com" {
 		return false
+	}
+
+	for _, char := range parts[0] {
+		if (char < 'a' || char > 'z') && (char < '0' || char > '9') && char != '-' {
+			return false
+		}
 	}
 
 	return true
