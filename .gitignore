@@ -1,6 +1,7 @@
 .idea
 vendor
 .env
+graphify-out
 .vscode
 storage
 .DS_Store
