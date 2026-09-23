@@ -133,12 +133,13 @@ import (
 func ExampleClientCreation() {
     logger := logger.New(logger.LevelInfo, "amocrm")
     
-    // Create client with: clientID, clientSecret, token, redirectURL, logger
+    // Create client with: clientID, clientSecret, token, redirectURL, domain, logger
     client := amocrm.New(
         "your-client-id",
         "your-client-secret", 
         "your-bearer-token",
         "https://your-redirect-url.com",
+        "https://your-account.amocrm.ru/",
         logger,
     )
     
@@ -147,6 +148,11 @@ func ExampleClientCreation() {
     // ... work with leads
 }
 ```
+
+The account domain is required. Both `your-account.amocrm.ru` and
+`https://your-account.amocrm.ru/` are accepted, as are `.amocrm.com` accounts.
+Requests always use HTTPS. Callers using the previous five-argument constructor
+must add the account domain before the logger argument.
 
 ## Constants
 
