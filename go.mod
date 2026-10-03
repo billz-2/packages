@@ -25,7 +25,7 @@ require (
 
 require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.37.1
-	github.com/docker/docker v28.2.2+incompatible
+	github.com/docker/docker v28.3.3+incompatible
 	github.com/golang-migrate/migrate/v4 v4.18.3
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/lib/pq v1.10.9
