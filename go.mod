@@ -4,7 +4,7 @@ go 1.23.5
 
 require (
 	github.com/IBM/sarama v1.45.0
-	github.com/bugsnag/bugsnag-go/v2 v2.5.1
+	github.com/bugsnag/bugsnag-go/v2 v2.6.4
 	github.com/cloudevents/sdk-go/protocol/kafka_sarama/v2 v2.15.2
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/docker/go-connections v0.5.0
