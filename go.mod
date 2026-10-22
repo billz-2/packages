@@ -28,6 +28,7 @@ require (
 	github.com/docker/docker v28.2.2+incompatible
 	github.com/golang-migrate/migrate/v4 v4.18.3
 	github.com/jmoiron/sqlx v1.4.0
+	github.com/klauspost/compress v1.18.0
 	github.com/lib/pq v1.10.9
 	github.com/redis/go-redis/v9 v9.5.1
 	github.com/testcontainers/testcontainers-go v0.37.0
@@ -90,7 +91,6 @@ require (
 	github.com/jcmturner/rpc/v2 v2.0.3 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0 // indirect
-	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20250317134145-8bc96cf8fc35 // indirect
