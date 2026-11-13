@@ -30,11 +30,25 @@ const EnvElasticsearchImage = "TEST_ELASTICSEARCH_IMAGE"
 // change behavior.
 const defaultElasticsearchImage = "docker.elastic.co/elasticsearch/elasticsearch:9.0.4"
 
-// elasticsearchDockerfile is the build recipe used when no override image is
-// supplied. It bakes the analysis-icu plugin into the default image so it is
+// EnvElasticsearchBaseImage is the name of the environment variable that
+// overrides only the base image of the inline build; the analysis-icu plugin
+// is still baked in. CI runners behind a Docker Hub pull-through mirror set
+// it to Elastic's Docker Hub copy of the same release
+// ("elastic/elasticsearch:9.0.4"), so the 700 MB base image comes from the
+// mirror instead of docker.elastic.co.
+const EnvElasticsearchBaseImage = "TEST_ELASTICSEARCH_BASE_IMAGE"
+
+// elasticsearchDockerfile returns the build recipe used when no override image
+// is supplied. It bakes the analysis-icu plugin into the base image so it is
 // available without any runtime installation.
-const elasticsearchDockerfile = "FROM " + defaultElasticsearchImage + "\n" +
-	"RUN CLI_JAVA_OPTS=\"-Xms256m -Xmx256m\" elasticsearch-plugin install --batch analysis-icu\n"
+func elasticsearchDockerfile() string {
+	base := defaultElasticsearchImage
+	if img := os.Getenv(EnvElasticsearchBaseImage); img != "" {
+		base = img
+	}
+	return "FROM " + base + "\n" +
+		"RUN CLI_JAVA_OPTS=\"-Xms256m -Xmx256m\" elasticsearch-plugin install --batch analysis-icu\n"
+}
 
 // elasticsearchBuildContext returns a tar archive containing the inline
 // Dockerfile above, suitable for testcontainers' FromDockerfile.ContextArchive.
@@ -44,7 +58,7 @@ func elasticsearchBuildContext() io.ReadSeeker {
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
 
-	content := []byte(elasticsearchDockerfile)
+	content := []byte(elasticsearchDockerfile())
 	// The error is intentionally ignored: writing a fixed, small payload to an
 	// in-memory buffer cannot fail in practice.
 	_ = tw.WriteHeader(&tar.Header{
