@@ -1,4 +1,4 @@
--- Keep in sync with billz_auth_service/migrations/postgres/000164_translations.up.sql
+-- Keep in sync with billz_auth_service/migrations/postgres/000169_translations.up.sql
 CREATE TABLE IF NOT EXISTS translations (
     id           serial PRIMARY KEY,
     service_name text        NOT NULL UNIQUE,
