@@ -1,8 +1,12 @@
 package test_environment
 
 import (
+	"archive/tar"
+	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"time"
 
 	"github.com/billz-2/packages/pkg/logger"
@@ -12,6 +16,61 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
+
+// EnvElasticsearchImage is the name of the environment variable that
+// callers may set to override the default Elasticsearch image used by
+// SetupElastic. This is useful when a service needs an image with extra
+// plugins installed (e.g. analysis-icu), but does not want to fork the
+// whole pkg/test_environment.
+const EnvElasticsearchImage = "TEST_ELASTICSEARCH_IMAGE"
+
+// defaultElasticsearchImage is the base image the package builds on when
+// EnvElasticsearchImage is not set. Keep it in sync with the Elasticsearch
+// version the package has historically targeted, so existing callers don't
+// change behavior.
+const defaultElasticsearchImage = "docker.elastic.co/elasticsearch/elasticsearch:9.0.4"
+
+// EnvElasticsearchBaseImage is the name of the environment variable that
+// overrides only the base image of the inline build; the analysis-icu plugin
+// is still baked in. CI runners behind a Docker Hub pull-through mirror set
+// it to Elastic's Docker Hub copy of the same release
+// ("elastic/elasticsearch:9.0.4"), so the 700 MB base image comes from the
+// mirror instead of docker.elastic.co.
+const EnvElasticsearchBaseImage = "TEST_ELASTICSEARCH_BASE_IMAGE"
+
+// elasticsearchDockerfile returns the build recipe used when no override image
+// is supplied. It bakes the analysis-icu plugin into the base image so it is
+// available without any runtime installation.
+func elasticsearchDockerfile() string {
+	base := defaultElasticsearchImage
+	if img := os.Getenv(EnvElasticsearchBaseImage); img != "" {
+		base = img
+	}
+	return "FROM " + base + "\n" +
+		"RUN CLI_JAVA_OPTS=\"-Xms256m -Xmx256m\" elasticsearch-plugin install --batch analysis-icu\n"
+}
+
+// elasticsearchBuildContext returns a tar archive containing the inline
+// Dockerfile above, suitable for testcontainers' FromDockerfile.ContextArchive.
+// Building the context in-memory keeps pkg/test_environment self-contained so
+// importing services don't need to vendor a Dockerfile on disk.
+func elasticsearchBuildContext() io.ReadSeeker {
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+
+	content := []byte(elasticsearchDockerfile())
+	// The error is intentionally ignored: writing a fixed, small payload to an
+	// in-memory buffer cannot fail in practice.
+	_ = tw.WriteHeader(&tar.Header{
+		Name: "Dockerfile",
+		Mode: 0o600,
+		Size: int64(len(content)),
+	})
+	_, _ = tw.Write(content)
+	_ = tw.Close()
+
+	return bytes.NewReader(buf.Bytes())
+}
 
 func SetupElastic(ctx context.Context, cfg Config) (esConfig elasticsearch.Config, elastic testcontainers.Container, err error) {
 	if cfg.Environment == "local" {
@@ -36,7 +95,6 @@ func SetupElastic(ctx context.Context, cfg Config) (esConfig elasticsearch.Confi
 		WithStartupTimeout(5 * time.Minute)
 
 	req := testcontainers.ContainerRequest{
-		Image: "elasticsearch:9.0.4",
 		Env: map[string]string{
 			"discovery.type":                  "single-node",
 			"ES_JAVA_OPTS":                    "-Xms512m -Xmx512m",
@@ -48,6 +106,27 @@ func SetupElastic(ctx context.Context, cfg Config) (esConfig elasticsearch.Confi
 		WaitingFor:   ws,
 	}
 
+	// The stock Elasticsearch image does not bundle the analysis-icu
+	// plugin, which some services rely on. Instead of installing it at
+	// runtime and restarting the container (slow, requires network access
+	// on every run, and races the wait strategy), we bake the plugin into
+	// the image at build time via a tiny inline Dockerfile. Docker caches
+	// the resulting layer, so subsequent runs are fast and work offline.
+	//
+	// If a caller overrides the image via EnvElasticsearchImage, we assume
+	// it already ships the plugins they need and use it directly.
+	if img := os.Getenv(EnvElasticsearchImage); img != "" {
+		req.Image = img
+	} else {
+		req.FromDockerfile = testcontainers.FromDockerfile{
+			ContextArchive: elasticsearchBuildContext(),
+			// keep the built image so it is reused across runs
+			Repo:      "billz-test/elasticsearch-icu",
+			Tag:       "9.0.4",
+			KeepImage: true,
+		}
+	}
+
 	elastic, err = testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: req,
 		Started:          true,
@@ -55,27 +134,6 @@ func SetupElastic(ctx context.Context, cfg Config) (esConfig elasticsearch.Confi
 	if err != nil {
 		return elasticsearch.Config{}, nil, err
 	}
-
-	logger.Log.Info("Installing analysis-icu plugin...")
-	exitCode, output, err := elastic.Exec(ctx, []string{"elasticsearch-plugin", "install", "analysis-icu"})
-	if err != nil || exitCode != 0 {
-		logger.Log.Error("Failed to install plugin", logger.Error(err), logger.Any("output", output))
-		return elasticsearch.Config{}, nil, fmt.Errorf("failed to install plugin: %v, output: %s", err, output)
-	}
-	logger.Log.Info("Plugin installed successfully")
-
-	logger.Log.Info("Restarting Elasticsearch...")
-	if err := elastic.Stop(ctx, nil); err != nil {
-		logger.Log.Error("Failed to stop container", logger.Error(err))
-		return elasticsearch.Config{}, nil, err
-	}
-
-	if err := elastic.Start(ctx); err != nil {
-		logger.Log.Error("Failed to start container", logger.Error(err))
-		return elasticsearch.Config{}, nil, err
-	}
-
-	logger.Log.Info("Waiting for Elasticsearch to be ready...")
 
 	ip, err := elastic.Host(ctx)
 	if err != nil {

@@ -145,6 +145,119 @@ know the file size, and buffer grows wth every write operation that goes out of 
 differs less than 600 MB. So using temp file is more memory efficient while xlsx does not support proper streaming with
 memory flushes and cursor management.
 
+# compress
+
+Пакет для потокового сжатия и распаковки данных в zstd и gzip поверх `github.com/klauspost/compress` (чистый Go, без cgo).
+
+## Возможности
+
+- Потоковые `NewWriter` / `NewReader`: данные не держатся в памяти целиком
+- zstd для максимального сжатия, gzip — когда клиент умеет только его
+- Уровни сжатия `LevelFastest`, `LevelDefault`, `LevelBest` через `WithLevel`
+- Окно zstd всегда 8 MB: такое окно по RFC 8878 обязан поддерживать любой декодер
+- `Close` у writer / reader не закрывает исходный `io.Writer` / `io.Reader`
+- Хелперы `Compress` / `Decompress` для `[]byte`
+- Расширение файла и Content-Type по алгоритму: `Extension()`, `ContentType()`
+
+## Установка
+
+```bash
+go get github.com/billz-2/packages/pkg/compress
+```
+
+## Пример потоковой записи в файл
+
+```go
+package main
+
+import (
+  "bufio"
+  "encoding/json"
+  "os"
+
+  "github.com/billz-2/packages/pkg/compress"
+)
+
+type Row struct {
+  Barcode string `json:"barcode"`
+  Name    string `json:"name"`
+}
+
+func writeSnapshot(rows <-chan Row) error {
+  alg := compress.Zstd
+
+  f, err := os.Create("snapshot.ndjson" + alg.Extension())
+  if err != nil {
+    return err
+  }
+  defer f.Close()
+
+  zw, err := compress.NewWriter(f, alg, compress.WithLevel(compress.LevelBest))
+  if err != nil {
+    return err
+  }
+
+  bw := bufio.NewWriter(zw)
+  enc := json.NewEncoder(bw)
+
+  for row := range rows {
+    if err := enc.Encode(row); err != nil {
+      return err
+    }
+  }
+
+  if err := bw.Flush(); err != nil {
+    return err
+  }
+
+  // Close дописывает конец потока; файл закрывается отдельно.
+  return zw.Close()
+}
+
+func readSnapshot(path string) error {
+  f, err := os.Open(path)
+  if err != nil {
+    return err
+  }
+  defer f.Close()
+
+  zr, err := compress.NewReader(f, compress.Zstd)
+  if err != nil {
+    return err
+  }
+  defer zr.Close()
+
+  dec := json.NewDecoder(zr)
+  for dec.More() {
+    var row Row
+    if err := dec.Decode(&row); err != nil {
+      return err
+    }
+  }
+
+  return nil
+}
+```
+
+## Пример `Compress` / `Decompress`
+
+```go
+compressed, err := compress.Compress(data, compress.Gzip)
+if err != nil {
+  return err
+}
+
+original, err := compress.Decompress(compressed, compress.Gzip)
+if err != nil {
+  return err
+}
+
+// При загрузке в MinIO / S3:
+// minio.PutObjectOptions{ContentType: compress.Gzip.ContentType()}
+```
+
+Неизвестный алгоритм во всех функциях возвращает `compress.ErrUnknownAlgorithm`.
+
 # test_containers 
 ## Clickhouse Cluster Docker Container for Tests
 
