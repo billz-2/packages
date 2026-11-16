@@ -30,7 +30,7 @@ require (
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/klauspost/compress v1.18.0
 	github.com/lib/pq v1.10.9
-	github.com/redis/go-redis/v9 v9.5.1
+	github.com/redis/go-redis/v9 v9.5.5
 	github.com/testcontainers/testcontainers-go v0.37.0
 	github.com/testcontainers/testcontainers-go/modules/clickhouse v0.37.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.36.0
