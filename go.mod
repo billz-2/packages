@@ -1,6 +1,6 @@
 module github.com/billz-2/packages
 
-go 1.23.5
+go 1.24
 
 require (
 	github.com/IBM/sarama v1.45.0
@@ -28,7 +28,7 @@ require (
 	github.com/docker/docker v28.2.2+incompatible
 	github.com/golang-migrate/migrate/v4 v4.18.3
 	github.com/jmoiron/sqlx v1.4.0
-	github.com/klauspost/compress v1.18.0
+	github.com/klauspost/compress v1.18.7
 	github.com/lib/pq v1.10.9
 	github.com/redis/go-redis/v9 v9.5.1
 	github.com/testcontainers/testcontainers-go v0.37.0
