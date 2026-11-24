@@ -93,6 +93,8 @@ func TestLoadDict(t *testing.T) {
 
 	for _, ts := range testSuit {
 		t.Run(ts.name, func(t *testing.T) {
+			translation.ResetDictCache()
+
 			content, err := os.ReadFile("testdata/" + ts.fileName)
 			require.NoError(t, err)
 

@@ -83,6 +83,8 @@ WHERE translations.version < EXCLUDED.version`,
 		return fmt.Errorf("%w: %w", ErrRetry, err)
 	}
 
+	InvalidateDict(msg.ServiceName)
+
 	return nil
 }
 
