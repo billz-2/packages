@@ -22,6 +22,7 @@ func TestConsumerHandle(t *testing.T) {
 		closedDB    bool
 		source      string
 		data        string
+		mockFunc    func(t *testing.T)
 		assertFunc  func(t *testing.T, err error)
 	}{
 		{
@@ -225,15 +226,76 @@ func TestConsumerHandle(t *testing.T) {
 				assert.True(t, errors.Is(err, translation.ErrRetry))
 			},
 		},
+		{
+			name:     "newer foreign version drops the cached dictionary",
+			fileName: "consumer.sql",
+			source:   "svc_other",
+			data:     `{"service_name":"svc_other","version":6,"ru":{"a":"ru"},"en":{"a":"new"},"uz":{"a":"uz"}}`,
+			mockFunc: func(t *testing.T) {
+				dict, err := translation.LoadDict(ctx, db, "svc_other", translation.LangEn)
+				require.NoError(t, err)
+				require.Equal(t, "old", dict.Get("a", ""))
+			},
+			assertFunc: func(t *testing.T, err error) {
+				require.NoError(t, err)
+
+				dict, loadErr := translation.LoadDict(ctx, db, "svc_other", translation.LangEn)
+				require.NoError(t, loadErr)
+				assert.Equal(t, "new", dict.Get("a", ""))
+			},
+		},
+		{
+			name:     "older foreign version keeps the cached dictionary",
+			fileName: "consumer.sql",
+			source:   "svc_other",
+			data:     `{"service_name":"svc_other","version":4,"ru":{"a":"ru"},"en":{"a":"stale"},"uz":{"a":"uz"}}`,
+			mockFunc: func(t *testing.T) {
+				dict, err := translation.LoadDict(ctx, db, "svc_other", translation.LangEn)
+				require.NoError(t, err)
+				require.Equal(t, "old", dict.Get("a", ""))
+			},
+			assertFunc: func(t *testing.T, err error) {
+				require.NoError(t, err)
+
+				dict, loadErr := translation.LoadDict(ctx, db, "svc_other", translation.LangEn)
+				require.NoError(t, loadErr)
+				assert.Equal(t, "old", dict.Get("a", ""))
+			},
+		},
+		{
+			name:     "database error keeps the cached dictionary",
+			fileName: "consumer.sql",
+			closedDB: true,
+			source:   "svc_other",
+			data:     `{"service_name":"svc_other","version":6,"ru":{"a":"ru"},"en":{"a":"new"},"uz":{"a":"uz"}}`,
+			mockFunc: func(t *testing.T) {
+				dict, err := translation.LoadDict(ctx, db, "svc_other", translation.LangEn)
+				require.NoError(t, err)
+				require.Equal(t, "old", dict.Get("a", ""))
+			},
+			assertFunc: func(t *testing.T, err error) {
+				require.ErrorIs(t, err, translation.ErrRetry)
+
+				dict, loadErr := translation.LoadDict(ctx, db, "svc_other", translation.LangEn)
+				require.NoError(t, loadErr)
+				assert.Equal(t, "old", dict.Get("a", ""))
+			},
+		},
 	}
 
 	for _, ts := range testSuit {
 		t.Run(ts.name, func(t *testing.T) {
+			translation.ResetDictCache()
+
 			sqlBytes, err := os.ReadFile("testdata/" + ts.fileName)
 			require.NoError(t, err)
 
 			_, err = db.ExecContext(ctx, string(sqlBytes))
 			require.NoError(t, err)
+
+			if ts.mockFunc != nil {
+				ts.mockFunc(t)
+			}
 
 			var execer translation.Execer = db
 
