@@ -6,8 +6,6 @@ package translation
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 )
@@ -55,6 +53,7 @@ type Querier interface {
 
 // LoadDict loads the dictionary of a single language column for a service.
 // For LangRu no query is made and nil is returned. If the row is missing, an empty Dict is returned.
+// The result is cached in process memory (see DefaultDictCacheTTL) and must not be modified.
 func LoadDict(ctx context.Context, q Querier, serviceName string, lang Lang) (Dict, error) {
 	var query string
 
@@ -69,19 +68,5 @@ func LoadDict(ctx context.Context, q Querier, serviceName string, lang Lang) (Di
 		return nil, fmt.Errorf("%w: %q", ErrUnsupportedLang, lang)
 	}
 
-	var raw []byte
-	if err := q.QueryRowContext(ctx, query, serviceName).Scan(&raw); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return Dict{}, nil
-		}
-
-		return nil, fmt.Errorf("translation: load dict %s/%s: %w", serviceName, lang, err)
-	}
-
-	dict := Dict{}
-	if err := json.Unmarshal(raw, &dict); err != nil {
-		return nil, fmt.Errorf("translation: decode dict %s/%s: %w", serviceName, lang, err)
-	}
-
-	return dict, nil
+	return loadCached(ctx, q, query, serviceName, lang)
 }
