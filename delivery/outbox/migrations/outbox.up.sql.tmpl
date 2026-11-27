@@ -1,0 +1,27 @@
+-- Transactional outbox: the Kafka records of the service, written in the transaction of the business change and
+-- sent by the relay in id order. A row is deleted once Kafka acknowledged it.
+CREATE TABLE IF NOT EXISTS {{.Table}} (
+    id BIGSERIAL PRIMARY KEY,
+    topic TEXT NOT NULL,
+    key TEXT NOT NULL,
+    payload BYTEA,
+    headers JSONB NOT NULL DEFAULT '[]',
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);
+
+-- The relay reads each topic's rows in id order through this index, so the backlog of a topic it holds back
+-- (a failing topic) does not slow the reads of the others.
+CREATE INDEX IF NOT EXISTS {{.TopicIndex}} ON {{.Table}} (topic, id);
+
+-- Records that can never be sent (too large, an invalid or unknown topic): moved here so that they do not
+-- hold the records after them. Sent again by hand once the cause is fixed (the service's runbook).
+CREATE TABLE IF NOT EXISTS {{.FailedTable}} (
+    id BIGINT PRIMARY KEY,
+    topic TEXT NOT NULL,
+    key TEXT NOT NULL,
+    payload BYTEA,
+    headers JSONB NOT NULL DEFAULT '[]',
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    error TEXT NOT NULL,
+    failed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);

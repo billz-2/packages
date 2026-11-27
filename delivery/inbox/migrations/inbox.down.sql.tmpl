@@ -1,0 +1,16 @@
+-- Refuses while a queued or dead row exists: they are messages not handled yet, and dropping the table would
+-- lose them. A refused down leaves the table intact and the migration dirty at the version before:
+-- `migrate force` restores it. The check runs through EXECUTE, so that a missing table passes.
+DO $$
+DECLARE
+    pending BOOLEAN;
+BEGIN
+    IF to_regclass('{{.Table}}') IS NOT NULL THEN
+        EXECUTE 'SELECT EXISTS (SELECT 1 FROM {{.Table}} WHERE status <> 0)' INTO pending;
+        IF pending THEN
+            RAISE EXCEPTION '{{.TableName}} still has queued or dead rows: they would be lost';
+        END IF;
+    END IF;
+END $$;
+
+DROP TABLE IF EXISTS {{.Table}};
