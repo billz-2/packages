@@ -1,0 +1,28 @@
+-- Inbox: one row per consumed message, so that a message delivered again is skipped. Done rows lose their
+-- payload and are deleted after the retention; dead rows keep it until they are replayed or deleted by hand.
+CREATE TABLE IF NOT EXISTS {{.Table}} (
+    consumer TEXT NOT NULL,
+    -- ce_id, or topic/partition/offset for a message without one
+    event_id TEXT NOT NULL,
+    -- sha256 of the value, first 16 bytes: a reused id with another payload is another message
+    digest BYTEA NOT NULL,
+    -- 0 done, 1 queued, 2 dead
+    status SMALLINT NOT NULL,
+    topic TEXT NOT NULL,
+    kpartition INT NOT NULL,
+    koffset BIGINT NOT NULL,
+    key TEXT,
+    payload BYTEA,
+    headers JSONB,
+    attempts INT NOT NULL DEFAULT 0,
+    lease_until TIMESTAMP WITH TIME ZONE,
+    error TEXT,
+    received_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    PRIMARY KEY (consumer, event_id, digest)
+);
+
+CREATE INDEX IF NOT EXISTS {{.QueuedIndex}} ON {{.Table}} (consumer, received_at) WHERE status = 1;
+CREATE INDEX IF NOT EXISTS {{.DeadIndex}} ON {{.Table}} (updated_at) WHERE status = 2;
+-- rows are inserted in time order: the retention delete finds its old rows through a few block ranges
+CREATE INDEX IF NOT EXISTS {{.ReceivedIndex}} ON {{.Table}} USING brin (received_at);

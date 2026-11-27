@@ -1,0 +1,24 @@
+-- Refuses while a row exists: outbox rows are events not sent yet, failed rows are events set aside, and
+-- dropping the tables would lose them; let a relay send them, and deal with the failed rows, first. A refused
+-- down leaves both tables intact and the migration dirty at the version before: `migrate force` restores it.
+-- The checks run through EXECUTE, so that a missing table passes.
+DO $$
+DECLARE
+    pending BOOLEAN;
+BEGIN
+    IF to_regclass('{{.Table}}') IS NOT NULL THEN
+        EXECUTE 'SELECT EXISTS (SELECT 1 FROM {{.Table}})' INTO pending;
+        IF pending THEN
+            RAISE EXCEPTION '{{.TableName}} still has rows: they would be lost';
+        END IF;
+    END IF;
+    IF to_regclass('{{.FailedTable}}') IS NOT NULL THEN
+        EXECUTE 'SELECT EXISTS (SELECT 1 FROM {{.FailedTable}})' INTO pending;
+        IF pending THEN
+            RAISE EXCEPTION '{{.FailedTableName}} still has rows: they would be lost';
+        END IF;
+    END IF;
+END $$;
+
+DROP TABLE IF EXISTS {{.FailedTable}};
+DROP TABLE IF EXISTS {{.Table}};
